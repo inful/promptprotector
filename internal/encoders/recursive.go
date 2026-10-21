@@ -135,7 +135,15 @@ const textASCIIRatio = 0.7
 // decoded binary. It samples the head and tail only: the decision does
 // not need to be exact, and a multi-megabyte decode should not cost a
 // full scan.
+//
+// The empty case returns false: a successful decode that produces no
+// bytes is not "text" — it is "no payload here". Without this, the
+// strip-whitespace behaviour of base64.StdEncoding turns a single
+// newline input into a "decoded base64" finding.
 func isText(s string) bool {
+	if s == "" {
+		return false
+	}
 	const sample = 512
 	head, tail := s, ""
 	if len(s) > 2*sample {

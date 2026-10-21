@@ -97,11 +97,22 @@ const maxSpanFindingsPerCategory = 32
 // Finding.Span for highlighting points at the right region even when an
 // input has multiple disjoint homoglyph runs. Per-(category, form) the
 // count is capped at maxSpanFindingsPerCategory and the rest fold into
-// one summary Finding whose Span is nil.
+// one summary Finding whose Span is nil and whose Evidence reports the
+// real number of omitted spans.
 func unicodeFindings(label, text string) []Finding {
+	// First pass: sum the spans by category so the summary evidence
+	// reports the real omitted count rather than the cap value.
+	totalByCat := map[Category]int{}
+	for _, anomaly := range unicode.Scan(text) {
+		cat, ok := unicodeCategoryFor(anomaly.Category)
+		if !ok {
+			continue
+		}
+		totalByCat[cat] += len(anomaly.Spans)
+	}
+	emitted := map[Category]int{}
+	folded := map[Category]bool{}
 	var out []Finding
-	emitted := make(map[Category]int)
-	folded := make(map[Category]bool)
 	for _, anomaly := range unicode.Scan(text) {
 		cat, ok := unicodeCategoryFor(anomaly.Category)
 		if !ok {
@@ -117,7 +128,7 @@ func unicodeFindings(label, text string) []Finding {
 						Category: cat,
 						Score:    l1BaseScores[cat],
 						Evidence: fmt.Sprintf("%s: +%d more spans omitted (flood)",
-							label, n),
+							label, totalByCat[cat]-maxSpanFindingsPerCategory),
 					})
 					folded[cat] = true
 				}
