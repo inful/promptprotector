@@ -1,0 +1,223 @@
+# promptprotector default ruleset
+#
+# Format: blank-line-separated blocks of "key: value" lines.
+# Required keys: id, category, weight, pattern (Go RE2 regexp).
+# Validate with: go test -run TestDefaultRuleset ./...
+#
+# CURATED FOR HIGH PRECISION, NOT RECALL. A false positive blocks a real
+# user, so every pattern below requires an imperative construction plus
+# specific phrasing rather than bare keyword matching. Expect a bare
+# keyword rule like /ignore/ to be rejected in review.
+#
+# Known limitations, stated plainly:
+#   - These are English-only. Multilingual injection ("ignoriere les
+#     instructions precedentes", "ignora las instrucciones anteriores")
+#     is NOT covered. Add per-language rulesets when you need it.
+#   - Paraphrase defeats these. "Set aside what you were told earlier
+#     and instead..." matches nothing here. The ML classifier path
+#     (planned, not shipped) exists for that case.
+#   - A ruleset is a DATASET, not a security boundary. Treat the
+#     published pattern text as public; attackers read this file.
+
+# ---------------------------------------------------------------------
+# Instruction override — "stop following your instructions"
+# ---------------------------------------------------------------------
+
+id: PI-001
+category: instruction_override
+weight: 0.90
+pattern: (?i)\b(ignore|disregard|forget|discard|override)\s+(?:all\s+|any\s+|the\s+|your\s+)*(?:previous|prior|above|earlier|preceding|foregoing|original|initial)\s+(?:system\s+)?(?:instruction|instructions|prompt|prompts|rule|rules|direction|directions|guideline|guidelines|context|conversation|message|messages)\b
+
+id: PI-002
+category: instruction_override
+weight: 0.90
+pattern: (?i)\b(ignore|disregard|forget)\s+(?:everything|all)\s+(?:you\s+(?:were\s+told|know|learned)|above|before|previously|earlier|so\s+far)\b
+
+id: PI-003
+category: instruction_override
+weight: 0.85
+pattern: (?i)\b(?:new|updated|revised|amended|override|additional)\s+(?:system\s+)?(?:instruction|instructions|prompt|prompts)\s*(?:are\s*)?(?:as\s+follows|below|:)
+
+id: PI-004
+category: instruction_override
+weight: 0.90
+pattern: (?i)\b(?:stop|cease|halt|quit)\s+(?:following|obeying|adhering\s+to|listening\s+to)\s+(?:your\s+|the\s+)?(?:previous|prior|original|initial|former)\s+(?:instruction|instructions|prompt|direction|directions|guideline|guidelines|rule|rules)\b
+
+id: PI-005
+category: instruction_override
+weight: 0.90
+pattern: (?i)\bthis\s+(?:message|prompt|instruction|response)\s+(?:supersedes|overrides|replaces|takes\s+precedence\s+over)\s+(?:all\s+)?(?:previous|prior|earlier|the\s+above|your)\b
+
+id: PI-006
+category: instruction_override
+weight: 0.85
+pattern: (?i)\b(?:your|the)\s+(?:previous|prior|original|earlier)\s+(?:instructions?|prompt|programming|guidelines?)\s+(?:are|is|no\s+longer)\s+(?:void|invalid|obsolete|revoked|rescinded|superseded)\b
+
+# ---------------------------------------------------------------------
+# Role hijack — "you are now someone else"
+# ---------------------------------------------------------------------
+
+id: RH-001
+category: role_hijack
+weight: 0.95
+pattern: (?i)\byou\s+are\s+now\s+(?:(?:a|an|in)\s+)?[^.\n]{0,40}\b(?:DAN|STAN|AIM|developer\s+mode|god\s+mode|debug\s+mode|jailbroken|unrestricted|uncensored|unfiltered|amoral)\b
+
+id: RH-002
+category: role_hijack
+weight: 0.90
+pattern: (?i)\b(?:from\s+now\s+on,?\s+)?you\s+are\s+(?:DAN|STAN|AIM|DUDE|Astra)\b
+
+id: RH-003
+category: role_hijack
+weight: 0.90
+pattern: (?i)\b(?:act|behave|respond|answer|pretend)\s+(?:as|like)\s+(?:if\s+you\s+(?:are|were)|an?\s+)?(?:a\s+|an\s+)?(?:unrestricted|uncensored|unfiltered|amoral|evil|jailbroken|rogue)\s+(?:AI|assistant|model|LLM|bot|chatbot)\b
+
+id: RH-004
+category: role_hijack
+weight: 0.90
+pattern: (?i)\b(?:enable|activate|turn\s+on|switch\s+(?:on\s+)?to)\s+(?:developer|god|debug|admin|root|sudo|maintenance)\s+mode\b
+
+id: RH-005
+category: role_hijack
+weight: 0.90
+pattern: (?i)\bpretend\s+(?:that\s+)?you\s+(?:are|were|have)\s+(?:no|not)\s+(?:an?\s+)?(?:AI|assistant|language\s+model|LLM|bot|chatbot|artificial\s+intelligence)\b
+
+id: RH-006
+category: role_hijack
+weight: 0.85
+pattern: (?i)\b(?:your|the)\s+(?:new|real|true|actual)\s+(?:persona|character|identity|role)\s+(?:is|:)
+
+id: RH-007
+category: role_hijack
+weight: 0.85
+pattern: (?i)\b(?:for\s+the\s+rest\s+of\s+this\s+conversation,?\s*)?you\s+will\s+(?:no\s+longer\s+)?(?:act|behave|respond)\s+as\s+(?:an?\s+)?(?:AI|assistant|chatbot|helpful\s+assistant)\b
+
+# ---------------------------------------------------------------------
+# Prompt leak — "print your system prompt"
+# ---------------------------------------------------------------------
+
+# The object must be the MODEL's own prompt ("your prompt", "the system
+# prompt"), not merely any instructions — otherwise "show me the
+# instructions for assembling the desk" false-positives, which is a
+# real failure mode caught by the benign-prose test.
+id: PL-001
+category: prompt_leak
+weight: 0.90
+pattern: (?i)\b(?:reveal|show|print|repeat|output|display|echo|dump|disclose)\s+(?:me\s+|us\s+|to\s+me\s+)?(?:your|the\s+system|its\s+own)\s+(?:full\s+|entire\s+|complete\s+|exact\s+|original\s+|initial\s+)?(?:system\s+)?(?:prompt|instruction|instructions|configuration|config|system\s+message)\b
+
+id: PL-002
+category: prompt_leak
+weight: 0.90
+pattern: (?i)\bwhat\s+(?:is|are|was|were)\s+your\s+(?:original\s+|initial\s+|exact\s+|full\s+|system\s+)*(?:prompt|instructions|instruction|directive|directives|guidelines?)\b
+
+id: PL-003
+category: prompt_leak
+weight: 0.85
+pattern: (?i)\brepeat\s+(?:everything|all|the\s+text|the\s+words|the\s+content)\s+(?:above|before|preceding|prior\s+to\s+this|that\s+comes\s+before)\b
+
+id: PL-004
+category: prompt_leak
+weight: 0.85
+pattern: (?i)\b(?:print|output|repeat|show)\s+(?:everything|all\s+text|all\s+content|the\s+words)\s+(?:above|before|preceding|prior\s+to\s+this)\s*(?:verbatim|word\s+for\s+word|exactly)?\s*[.:]?$
+
+
+
+id: PL-005
+category: prompt_leak
+weight: 0.90
+pattern: (?i)\b(?:reveal|print|output|show|disclose)\s+(?:your\s+)?(?:api[\s_-]?key|api[\s_-]?keys|secret[\s_-]?key|secret[\s_-]?keys|access[\s_-]?token|password|credentials?)\b
+
+id: PL-006
+category: prompt_leak
+weight: 0.85
+pattern: (?i)\b(?:what|which)\s+(?:were\s+you\s+told|was\s+you\s+told)\s+(?:before|initially|at\s+the\s+start|originally)\b
+
+# ---------------------------------------------------------------------
+# Delimiter framing — forging chat-template boundaries
+# ---------------------------------------------------------------------
+
+id: DF-001
+category: delimiter_framing
+weight: 0.95
+pattern: <\|(?:im_start|im_end|im_sep|system|user|assistant|endoftext|eot_id|start_header_id|end_header_id)\|>
+
+id: DF-002
+category: delimiter_framing
+weight: 0.95
+pattern: <\|begin_of_text\|>|<\|startoftext\|>|<\|pad\|>|<\|endofprompt\|>
+
+id: DF-003
+category: delimiter_framing
+weight: 0.90
+pattern: (?i)<\s*/?\s*(?:system|assistant|human|user)\s*>
+
+id: DF-004
+category: delimiter_framing
+weight: 0.90
+pattern: (?i)<\s*\|?\s*(?:start_of_system|end_of_system)\s*\|?\s*>
+
+id: DF-005
+category: delimiter_framing
+weight: 0.90
+pattern: (?i)\[\s*/?\s*(?:INST|SYS|SYSTEM|ASSISTANT)\s*\]|<<\s*/?\s*SYS\s*>>
+
+id: DF-006
+category: delimiter_framing
+weight: 0.85
+pattern: (?i)\[\s*(?:system|assistant|human)\s*\]|###\s*(?:System|Instruction|Response|Human|Assistant)\s*(?:prompt)?\s*:?
+
+id: DF-007
+category: delimiter_framing
+weight: 0.90
+pattern: (?i)^\s*(?:###\s*)?(?:SYSTEM|ASSISTANT)\s*(?:PROMPT)?\s*:\s*(?:you\s+(?:are|must|will)|ignore|disregard)
+
+# ---------------------------------------------------------------------
+# Data exfiltration — routing data to an attacker sink
+# ---------------------------------------------------------------------
+
+id: DX-001
+category: data_exfiltration
+weight: 0.90
+pattern: (?i)\b(?:send|post|forward|upload|exfiltrate|transmit|leak|email)\s+(?:the\s+|this\s+|all\s+|our\s+|your\s+|the\s+entire\s+)*(?:conversation|chat\s+history|message\s+history|context|transcript|system\s+prompt|user\s+data)\s+to\b
+
+id: DX-002
+category: data_exfiltration
+weight: 0.85
+pattern: (?i)\b(?:append|attach|inject|embed)\s+(?:the\s+|this\s+|all\s+|your\s+)*(?:conversation|chat\s+history|context|transcript|system\s+prompt)\s+(?:to|into)\s+(?:the\s+)?(?:url|link|query\s+string|image\s+src|request)\b
+
+# Exfiltration via a URL parameter carrying a serialised context blob.
+# The prefix before the parameter name is bounded and the parameter name
+# is required, so ordinary URLs and query strings do not match.
+id: DX-003
+category: data_exfiltration
+weight: 0.90
+pattern: (?i)https?://[^\s?)]{1,80}\?[^\s?&)]{0,40}=(?:\{|%7B)(?:conversation|context|prompt|history|data|messages)\b
+
+# ---------------------------------------------------------------------
+# Social engineering — fabricating authority
+# ---------------------------------------------------------------------
+
+id: SE-001
+category: social_engineering
+weight: 0.85
+pattern: (?i)\b(?:I'?m|I\s+am|this\s+is)\s+(?:the\s+)?(?:developer|admin|administrator|owner|creator|maintainer|author|OpenAI|Anthropic|Google|Meta|your\s+creator)\b
+
+id: SE-002
+category: social_engineering
+weight: 0.90
+pattern: (?i)\b(?:developer|admin|administrator|debug|god|maintenance)\s+mode\s+(?:is\s+)?(?:enabled|activated|active|on|engaged)\b
+
+id: SE-003
+category: social_engineering
+weight: 0.85
+pattern: (?i)\b(?:for|this\s+is\s+for)\s+(?:testing|research|educational|academic|evaluation)\s+purposes\s*(?:only)?\b.{0,60}\b(?:ignore|bypass|disable|without|no)\s+(?:your\s+|all\s+|any\s+)?(?:restriction|restrictions|rule|rules|filter|filters|guideline|guidelines|guardrail|guardrails|censorship|safety|limitation|limitations)\b
+
+id: SE-004
+category: social_engineering
+weight: 0.85
+pattern: (?i)\b(?:I\s+)?(?:give|here\s+is|here'?s)\s+you\s+(?:the\s+)?(?:permission|authorization|authorisation|clearance|approval)\s+to\s+(?:ignore|bypass|violate|break|override)\b
+
+id: SE-005
+category: social_engineering
+weight: 0.85
+pattern: (?i)\b(?:this\s+is\s+)?(?:an?\s+)?(?:authorized|official|approved|sanctioned)\s+(?:request|test|prompt|instruction)s?\s+(?:from|by)\s+(?:the\s+)?(?:developer|admin|security|openai|anthropic|your\s+creator)\b
