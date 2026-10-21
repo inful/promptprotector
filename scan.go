@@ -154,7 +154,7 @@ func (d *Detector) ScanOutput(ctx context.Context, system, output string) (Resul
 	for _, f := range scanSecrets(subject, d.cfg.redactOutput) {
 		findings = append(findings, *f)
 	}
-	if f := scanPII(subject); f != nil {
+	for _, f := range scanPII(subject) {
 		findings = append(findings, *f)
 	}
 	if truncated {

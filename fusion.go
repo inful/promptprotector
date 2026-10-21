@@ -63,6 +63,12 @@ func runPipeline(input string, cfg config, rs Ruleset) Result {
 // The formula is intentionally simple enough to explain during triage:
 //
 //	score = clamp(maxScore * 0.7 + corroboration * 0.3, 0, 1)
+//
+// Note on thresholds: every shipped authored rule has weight >= 0.85,
+// which means any single L2 hit saturates maxScore into Block territory.
+// The Warn path is reachable only from L1 weak signals on their own or
+// from several distinct category firings; add a low-weight rule expecting
+// it to trigger Warn and the corroboration term is what carries it there.
 func fuse(findings []Finding, cfg config) (float64, Decision) {
 	if len(findings) == 0 {
 		return 0, Allow

@@ -17,6 +17,7 @@ var (
 	defaultErr   error
 	indirectOnce sync.Once
 	indirectRule Ruleset
+	indirectErr  error
 )
 
 // DefaultRuleset returns the built-in ruleset for direct user input. The
@@ -28,7 +29,7 @@ func DefaultRuleset() (Ruleset, error) {
 	defaultOnce.Do(func() {
 		defaultRule, defaultErr = ParseRuleset(defaultRulesetSrc)
 	})
-	return defaultRule, defaultErr
+	return cloneRuleset(defaultRule), defaultErr
 }
 
 // IndirectRuleset returns the built-in ruleset tuned for retrieved
@@ -39,7 +40,7 @@ func DefaultRuleset() (Ruleset, error) {
 // bar for flagging is higher.
 func IndirectRuleset() (Ruleset, error) {
 	indirectOnce.Do(func() {
-		indirectRule, _ = ParseRuleset(indirectRulesetSrc)
+		indirectRule, indirectErr = ParseRuleset(indirectRulesetSrc)
 	})
-	return indirectRule, nil
+	return cloneRuleset(indirectRule), indirectErr
 }

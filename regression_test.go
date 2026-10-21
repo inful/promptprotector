@@ -81,8 +81,8 @@ func TestRegression_F5_RealCanaryStillDetected(t *testing.T) {
 // Finding 7: the US phone rule matched bare digit runs, so a 10-digit
 // order number was reported as PII.
 func TestRegression_F7_OrderNumberIsNotPhonePII(t *testing.T) {
-	if f := scanPII("The order number is 123-456-7890"); f != nil {
-		t.Errorf("F7: order number flagged as %s", f.Rule)
+	if f := scanPII("The order number is 123-456-7890"); len(f) != 0 {
+		t.Errorf("F7: order number flagged as %s", f[0].Rule)
 	}
 }
 
@@ -92,7 +92,7 @@ func TestRegression_F7_RealPhoneStillDetected(t *testing.T) {
 		"Phone: (555) 123-4567",
 	}
 	for _, c := range cases {
-		if f := scanPII(c); f == nil {
+		if f := scanPII(c); len(f) == 0 {
 			t.Errorf("F7: real phone not detected in %q", c)
 		}
 	}

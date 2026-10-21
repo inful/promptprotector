@@ -15,6 +15,12 @@ import (
 // have to import the root while the root imports it for the embedded
 // default ruleset, which is an import cycle. The ruleset FILES still live
 // under rules/ (go:embed permits subdirectory paths).
+//
+// A Rule's compiled pattern (*re) is intentionally shared after a copy:
+// RE2 is safe for concurrent reads and rebuilding it on every WithRules
+// call would slow scan setups for no benefit. The other fields
+// (ID/Category/Weight/Pattern) are value-copied so caller mutations do
+// not silently alter a Detector — see cloneRuleset.
 type Rule struct {
 	// ID is a stable identifier used in Finding.Rule and in triage logs.
 	// Never reuse an ID for different logic; deprecate instead.
@@ -29,6 +35,23 @@ type Rule struct {
 
 	// re is the compiled pattern, populated by ParseRuleset.
 	re *regexp.Regexp
+}
+
+// cloneRuleset returns a deep copy of rs: a fresh slice whose every
+// Rule carries its own ID/Category/Weight/Pattern values. The compiled
+// *regexp.Regexp is shared because RE2 is goroutine-safe to share and
+// rebuilding it on every Detector construction would slow scan setup.
+//
+// This closes F2/F3: a caller who mutates a returned Ruleset's Weight
+// or ID does not silently change Detectors that already absorbed the
+// values.
+func cloneRuleset(rs Ruleset) Ruleset {
+	if len(rs.Rules) == 0 {
+		return Ruleset{}
+	}
+	out := make([]Rule, len(rs.Rules))
+	copy(out, rs.Rules)
+	return Ruleset{Rules: out}
 }
 
 // Ruleset is an ordered collection of rules. Order is source order and is

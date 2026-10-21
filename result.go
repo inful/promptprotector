@@ -114,7 +114,7 @@ type Span struct {
 // Finding is one piece of evidence that an input is suspicious.
 //
 // Layer names the pipeline stage that produced it ("l1_normalize",
-// "l2_regex", "l3_structural"). Rule is a stable identifier for the
+// "l2_regex", "l3_output"). Rule is a stable identifier for the
 // specific check ("recursive_decode", "zwsp", "JB-001"); it is empty for
 // structural findings that have no authored rule ID. Score is 0..1 and is
 // the *layer's own* confidence, before cross-layer fusion — callers

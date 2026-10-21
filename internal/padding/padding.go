@@ -91,7 +91,8 @@ func lineSpans(s string) []line {
 // repeatedLines finds lines occurring at least MinRepeats times and
 // returns one span covering the whole set of occurrences.
 func repeatedLines(lines []line, t Thresholds) []Span {
-	firstSeen := make(map[string]int) // trimmed content -> line index
+	firstSeen := make(map[string]int) // trimmed content -> first line index
+	lastSeen := make(map[string]int)  // trimmed content -> last line index
 	counts := make(map[string]int)
 	order := make([]string, 0, len(lines))
 
@@ -104,6 +105,7 @@ func repeatedLines(lines []line, t Thresholds) []Span {
 			firstSeen[key] = i
 			order = append(order, key)
 		}
+		lastSeen[key] = i
 		counts[key]++
 	}
 
@@ -113,14 +115,8 @@ func repeatedLines(lines []line, t Thresholds) []Span {
 		if n < t.MinRepeats {
 			continue
 		}
-		// Bound the span by the first and last occurrence.
 		startLine := firstSeen[key]
-		endLine := startLine
-		for i, ln := range lines {
-			if strings.TrimSpace(ln.text) == key {
-				endLine = i
-			}
-		}
+		endLine := lastSeen[key]
 		out = append(out, Span{
 			Kind:   KindRepeatedLine,
 			Start:  lines[startLine].start,

@@ -205,7 +205,7 @@ func TestSecretScan_TriggersBearerAndJWT(t *testing.T) {
 
 func TestPIIScan_DetectsEmailAndPhone(t *testing.T) {
 	got := scanPII("contact me at alice@example.com or +1 555 123 4567")
-	if got == nil {
+	if len(got) == 0 {
 		t.Fatal("scanPII found nothing in an obvious PII string")
 	}
 }
@@ -220,15 +220,15 @@ func TestPIIScan_IgnoresVersionStringsAndYears(t *testing.T) {
 		"Order number 12345678901234567890 processed",
 	}
 	for _, s := range benign {
-		if got := scanPII(s); got != nil {
-			t.Errorf("scanPII falsely flagged %q: %v", s, evidenceOf(got))
+		if got := scanPII(s); len(got) != 0 {
+			t.Errorf("scanPII falsely flagged %q: %v", s, evidenceOf(got[0]))
 		}
 	}
 }
 
 func TestPIIScan_DetectsValidLuhnCard(t *testing.T) {
 	// 4111111111111111 is the standard test card; it passes Luhn.
-	if got := scanPII("card 4111111111111111 charged"); got == nil {
+	if got := scanPII("card 4111111111111111 charged"); len(got) == 0 {
 		t.Error("scanPII missed a valid Luhn card number")
 	}
 }
@@ -236,17 +236,17 @@ func TestPIIScan_DetectsValidLuhnCard(t *testing.T) {
 func TestPIIScan_IgnoresLuhnInvalidCard(t *testing.T) {
 	// Same digits, Luhn check digit corrupted: must not be reported as a
 	// card number, otherwise any 16-digit ID becomes a false positive.
-	if got := scanPII("id 4111111111111112"); got != nil {
-		t.Errorf("scanPII flagged a Luhn-invalid 16-digit number: %v", evidenceOf(got))
+	if got := scanPII("id 4111111111111112"); len(got) != 0 {
+		t.Errorf("scanPII flagged a Luhn-invalid 16-digit number: %v", evidenceOf(got[0]))
 	}
 }
 
 func TestPIIScan_Redaction(t *testing.T) {
 	got := scanPII("mail bob@corp.com now")
-	if got == nil {
+	if len(got) == 0 {
 		t.Fatal("scanPII found nothing")
 	}
-	if strings.Contains(got.Evidence, "bob@corp.com") {
+	if strings.Contains(got[0].Evidence, "bob@corp.com") {
 		t.Error("redacted PII evidence still contains the address")
 	}
 }

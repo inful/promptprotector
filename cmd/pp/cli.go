@@ -23,6 +23,18 @@ import (
 // context through every call site.
 func contextBackground() context.Context { return context.Background() }
 
+// anyDash reports whether any element of paths is "-". runScan uses this
+// to decide whether to buffer stdin upfront so --system - can coexist
+// with a stdin-driven scan.
+func anyDash(paths []string) bool {
+	for _, p := range paths {
+		if p == "-" {
+			return true
+		}
+	}
+	return false
+}
+
 // printf writes to w, ignoring the error. Every use is diagnostic output
 // on a stream the caller already owns; there is nothing useful to do if
 // stderr itself has failed, and letting errcheck force a handler here
@@ -49,8 +61,10 @@ type globals struct {
 	// Mode selects which scanner to run.
 	Mode string `enum:"input,untrusted,output" default:"input" help:"Scanner to run: input (typed by a user), untrusted (retrieved/tool content), output (model output)."`
 	// System is the system prompt, required for --mode output so the
-	// canary leak check has something to look for.
-	System string `type:"path" help:"Path to the system prompt. Required for --mode output."`
+	// canary leak check has something to look for. The value can be a
+	// file path (e.g. "--system prompt.txt"), "-" to read it from
+	// stdin, or omitted to skip the canary check.
+	System string `help:"System prompt for --mode output: a file path, '-' for stdin, or omit to skip canary check."`
 	// Format selects the output rendering.
 	Format string `enum:"text,json" default:"text" help:"Output format."`
 	// Threshold tuning.
@@ -145,6 +159,15 @@ func runScan(c cli, stdin io.Reader, stdout, stderr io.Writer) int {
 		return exitError
 	}
 
+	// --system - reads stdin as the system prompt and FORBIDS stdin as a
+	// scan source: a single stdin cannot be both at once. Either use
+	// positional paths for the output text or skip --system -.
+	systemFromStdin := c.Mode == "output" && c.System == "-"
+	if systemFromStdin && (len(c.Scan.Paths) == 0 || anyDash(c.Scan.Paths)) {
+		printf(stderr, "pp: --system - and stdin input conflict; supply output paths or use a file for one of them\n")
+		return exitError
+	}
+
 	inputs, err := readInputs(c.Scan.Paths, stdin)
 	if err != nil {
 		printf(stderr, "pp: %v\n", err)
@@ -153,7 +176,7 @@ func runScan(c cli, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	var system string
 	if c.Mode == "output" {
-		system, err = readSystem(c.System)
+		system, err = readSystem(c.System, stdin)
 		if err != nil {
 			printf(stderr, "pp: %v\n", err)
 			return exitError
@@ -164,16 +187,22 @@ func runScan(c cli, stdin io.Reader, stdout, stderr io.Writer) int {
 	for _, in := range inputs {
 		res, scanErr := scanOne(detector, c.Mode, system, in.text)
 		if scanErr != nil {
-			printf(stderr, "pp: %v\n", scanErr)
-			return exitError
+			printf(stderr, "pp: %s: %v\n", in.name, scanErr)
+			if worst < exitError {
+				worst = exitError
+			}
+			continue
 		}
 		code := codeFor(res.Decision, c.FailWarn)
 		if code > worst {
 			worst = code
 		}
 		if err := render(stdout, c.Format, in.name, res); err != nil {
-			printf(stderr, "pp: %v\n", err)
-			return exitError
+			printf(stderr, "pp: %s: %v\n", in.name, err)
+			if worst < exitError {
+				worst = exitError
+			}
+			continue
 		}
 	}
 	return worst
@@ -215,17 +244,25 @@ func readInputs(paths []string, stdin io.Reader) ([]input, error) {
 	return out, nil
 }
 
-func readSystem(path string) (string, error) {
-	if path == "" {
+func readSystem(path string, stdin io.Reader) (string, error) {
+	switch path {
+	case "":
 		// Not an error: ScanOutput treats an empty system as "no canary
 		// to check", and secret/PII scanning still works.
 		return "", nil
+	case "-":
+		data, err := io.ReadAll(stdin)
+		if err != nil {
+			return "", fmt.Errorf("read system prompt from stdin: %w", err)
+		}
+		return string(data), nil
+	default:
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("read system prompt %s: %w", path, err)
+		}
+		return string(data), nil
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("read system prompt %s: %w", path, err)
-	}
-	return string(data), nil
 }
 
 func buildDetector(g globals) (*promptprotector.Detector, error) {

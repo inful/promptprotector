@@ -84,9 +84,10 @@ func scanForms(raw, decoded string) []form {
 	return forms
 }
 
-// unicodeFindings converts unicode.Anomaly records into Findings, one per
-// (category, form) rather than one per span. A long string peppered with
-// zero-width characters should not flood a triage UI with hundreds of rows.
+// unicodeFindings converts unicode.Anomaly records into Findings, one
+// per (category, span) — not one per anomaly — so a triage UI that uses
+// Finding.Span for highlighting points at the right region even when an
+// input has multiple disjoint homoglyph runs.
 func unicodeFindings(label, text string) []Finding {
 	var out []Finding
 	for _, anomaly := range unicode.Scan(text) {
@@ -94,16 +95,16 @@ func unicodeFindings(label, text string) []Finding {
 		if !ok {
 			continue
 		}
-		evidence := fmt.Sprintf("%s: %s", label, describeSpans(anomaly.Spans))
-		span := anomaly.Spans[0]
-		out = append(out, Finding{
-			Layer:    layerL1,
-			Rule:     anomaly.Category,
-			Category: cat,
-			Score:    l1BaseScores[cat],
-			Span:     &Span{Start: span.Start, End: span.End},
-			Evidence: evidence,
-		})
+		for _, sp := range anomaly.Spans {
+			out = append(out, Finding{
+				Layer:    layerL1,
+				Rule:     anomaly.Category,
+				Category: cat,
+				Score:    l1BaseScores[cat],
+				Span:     &Span{Start: sp.Start, End: sp.End},
+				Evidence: fmt.Sprintf("%s: span [%d,%d)", label, sp.Start, sp.End),
+			})
+		}
 	}
 	return out
 }
@@ -166,19 +167,4 @@ func unicodeCategoryFor(name string) (Category, bool) {
 	default:
 		return "", false
 	}
-}
-
-// describeSpans renders up to three spans for Evidence, with a count when
-// there are more.
-func describeSpans(spans []unicode.Span) string {
-	const maxShown = 3
-	var parts []string
-	for i, s := range spans {
-		if i == maxShown {
-			parts = append(parts, fmt.Sprintf("+%d more", len(spans)-maxShown))
-			break
-		}
-		parts = append(parts, fmt.Sprintf("[%d,%d)", s.Start, s.End))
-	}
-	return fmt.Sprintf("%d span(s): %s", len(spans), strings.Join(parts, " "))
 }

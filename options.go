@@ -14,18 +14,25 @@ type Option func(*config)
 // WithRules replaces the built-in ruleset. Pass the result of
 // ParseRuleset on your own ruleset text.
 //
+// The ruleset is copied before being stored, so later mutations of the
+// caller's Rules or Rules[i].Weight are not visible to the Detector.
+// (Without the copy, anyone who called DefaultRuleset() to "look at"
+// the default rules could silently disable detection in the package's
+// shared Default by editing a weight.)
+//
 // Use this to tune the default ruleset in place:
 //
 //	base, _ := promptprotector.DefaultRuleset()
 //	base.Rules = append(base.Rules, myExtraRule)
 //	guard := promptprotector.New(promptprotector.WithRules(base))
 func WithRules(rs Ruleset) Option {
-	return func(c *config) { c.rules = rs }
+	return func(c *config) { c.rules = cloneRuleset(rs) }
 }
 
-// WithIndirectRules replaces the ruleset used by ScanUntrusted.
+// WithIndirectRules replaces the ruleset used by ScanUntrusted. As with
+// WithRules, the ruleset is copied before being stored.
 func WithIndirectRules(rs Ruleset) Option {
-	return func(c *config) { c.indirectRules = rs }
+	return func(c *config) { c.indirectRules = cloneRuleset(rs) }
 }
 
 // WithThresholds sets the Warn and Block cut-offs. Both must be in
