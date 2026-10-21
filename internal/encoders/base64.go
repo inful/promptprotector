@@ -13,7 +13,7 @@ var ErrInvalidBase64 = errors.New("encoders: invalid base64 input")
 
 // Base64 decodes a single base64-encoded string using the standard alphabet
 // with padding. It is one of the L1 single-pass decoders composed by the
-// normalize layer (see Encode/Decode recursive descent in encode.go).
+// normalize layer (see RecursiveDecode in recursive.go).
 func Base64(s string) (string, error) {
 	data, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {
