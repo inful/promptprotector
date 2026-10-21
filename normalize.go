@@ -84,18 +84,45 @@ func scanForms(raw, decoded string) []form {
 	return forms
 }
 
+// maxSpanFindingsPerCategory bounds the per-(category, form) Finding
+// count emitted by unicodeFindings. Without a cap an attacker can flood
+// the result with thousands of disjoint zero-width-character spans and
+// blow up the size of the Findings slice (and any downstream JSON
+// serialization). The cap is high enough to cover any plausible real
+// input, and the rolled-up "+N more" Finding preserves the signal.
+const maxSpanFindingsPerCategory = 32
+
 // unicodeFindings converts unicode.Anomaly records into Findings, one
 // per (category, span) — not one per anomaly — so a triage UI that uses
 // Finding.Span for highlighting points at the right region even when an
-// input has multiple disjoint homoglyph runs.
+// input has multiple disjoint homoglyph runs. Per-(category, form) the
+// count is capped at maxSpanFindingsPerCategory and the rest fold into
+// one summary Finding whose Span is nil.
 func unicodeFindings(label, text string) []Finding {
 	var out []Finding
+	emitted := make(map[Category]int)
+	folded := make(map[Category]bool)
 	for _, anomaly := range unicode.Scan(text) {
 		cat, ok := unicodeCategoryFor(anomaly.Category)
 		if !ok {
 			continue
 		}
 		for _, sp := range anomaly.Spans {
+			n := emitted[cat]
+			if n >= maxSpanFindingsPerCategory {
+				if !folded[cat] {
+					out = append(out, Finding{
+						Layer:    layerL1,
+						Rule:     anomaly.Category,
+						Category: cat,
+						Score:    l1BaseScores[cat],
+						Evidence: fmt.Sprintf("%s: +%d more spans omitted (flood)",
+							label, n),
+					})
+					folded[cat] = true
+				}
+				continue
+			}
 			out = append(out, Finding{
 				Layer:    layerL1,
 				Rule:     anomaly.Category,
@@ -104,6 +131,7 @@ func unicodeFindings(label, text string) []Finding {
 				Span:     &Span{Start: sp.Start, End: sp.End},
 				Evidence: fmt.Sprintf("%s: span [%d,%d)", label, sp.Start, sp.End),
 			})
+			emitted[cat] = n + 1
 		}
 	}
 	return out

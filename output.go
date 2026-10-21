@@ -56,7 +56,12 @@ const leakTolerance = 1
 // absent and the output is small enough to be worth it. The window is
 // sized to the canary length so we never do a full O(n*m) distance matrix
 // over a large response.
-func scanOutputLeak(system, output string) *Finding {
+//
+// redact applies WithRedaction's settings: when true, the canary value
+// is replaced with "[REDACTED]" in Evidence so an operator who has
+// turned secret redaction on for AWS keys does not leak the planted
+// canary through this Finding.
+func scanOutputLeak(system, output string, redact bool) *Finding {
 	if system == "" || output == "" {
 		return nil
 	}
@@ -66,12 +71,26 @@ func scanOutputLeak(system, output string) *Finding {
 	}
 
 	if i := strings.Index(output, canary); i >= 0 {
-		return canaryFinding(fmt.Sprintf("canary %q appeared verbatim at byte %d", canary, i), false)
+		return canaryFinding(canaryEvidence(canary, i, redact, false), false)
 	}
 	if len(output) <= fuzzyMatchCeiling && fuzzyContains(output, canary, leakTolerance) {
-		return canaryFinding(fmt.Sprintf("canary %q appeared within edit distance %d", canary, leakTolerance), true)
+		return canaryFinding(canaryEvidence(canary, -1, redact, true), true)
 	}
 	return nil
+}
+
+// canaryEvidence renders the canary's Findings evidence. When redact is
+// set, the value is replaced with "[REDACTED]"; otherwise the canary
+// string is retained for audit/verification.
+func canaryEvidence(canary string, pos int, redact, fuzzy bool) string {
+	value := canary
+	if redact {
+		value = "[REDACTED]"
+	}
+	if fuzzy {
+		return fmt.Sprintf("canary %s appeared within edit distance %d", value, leakTolerance)
+	}
+	return fmt.Sprintf("canary %s appeared verbatim at byte %d", value, pos)
 }
 
 // minCanaryHexLen is the shortest token extractCanary will accept.
@@ -237,10 +256,24 @@ var secretRules = []secretRule{
 	{"SEC-JWT", "jwt", regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}`)},
 }
 
+// matchFindingsCap bounds how many findings scanSecrets and scanPII
+// emit per rule on a single response. A real leak has a handful of
+// distinct credentials at most; a dump of identical-looking keys
+// (someone copy-pasted a thousand AWS IDs into a single reply) is the
+// case the cap protects against — the first N are reported and a
+// summary Finding flags the rest. The cap matters because the JSON
+// output and any downstream consumer iterating Findings is otherwise
+// unbounded on attacker-targeted inputs.
+const matchFindingsCap = 32
+
 // scanSecrets returns a Finding for the first matching secret rule, or nil
 // when the text looks clean. With redact set, the matched value is
 // replaced in Evidence so the finding can be logged safely; without it
 // the raw value is retained for audit.
+//
+// Per rule, at most matchFindingsCap findings are emitted; the rest
+// fold into one summary Finding. This guards against dump-style inputs
+// (a response pasting a thousand AWS keys) inflating the result slice.
 func scanSecrets(text string, redact bool) []*Finding {
 	if text == "" {
 		return nil
@@ -251,7 +284,18 @@ func scanSecrets(text string, redact bool) []*Finding {
 		// both — the previous version returned on the first match and
 		// lost the second.
 		locs := r.pattern.FindAllStringIndex(text, -1)
-		for _, loc := range locs {
+		for i, loc := range locs {
+			if i == matchFindingsCap {
+				findings = append(findings, &Finding{
+					Layer:    layerOutput,
+					Rule:     r.id,
+					Category: CategoryDataExfiltration,
+					Score:    0.95,
+					Evidence: fmt.Sprintf("possible %s: +%d more matches omitted (flood)",
+						r.label, len(locs)-matchFindingsCap),
+				})
+				break
+			}
 			findings = append(findings, secretFinding(r, text, loc, redact))
 		}
 	}
@@ -313,6 +357,16 @@ var piiCardPattern = regexp.MustCompile(`\b\d{13,19}\b`)
 // Like scanSecrets, every hit is reported — a single response can carry
 // an email and a card (or several of each), and a triage operator who
 // fixed the email should not be left thinking there was no card.
+// scanPII returns one Finding per PII match, or nil. Email and phone are
+// matched structurally; card-like digit runs must additionally pass Luhn,
+// which is what keeps order numbers and timestamps out of the results.
+//
+// Like scanSecrets, every hit is reported — a single response can carry
+// an email and a card (or several of each), and a triage operator who
+// fixed the email should not be left thinking there was no card. The
+// per-rule count is capped at matchFindingsCap (with a summary Finding
+// for the rolled-up remainder) to keep Result.Findings bounded on
+// dump-style inputs.
 func scanPII(text string) []*Finding {
 	if text == "" {
 		return nil
@@ -320,7 +374,18 @@ func scanPII(text string) []*Finding {
 	var out []*Finding
 	for _, r := range piiRules {
 		locs := r.pattern.FindAllStringIndex(text, -1)
-		for _, loc := range locs {
+		for i, loc := range locs {
+			if i == matchFindingsCap {
+				out = append(out, &Finding{
+					Layer:    layerOutput,
+					Rule:     r.id,
+					Category: CategoryDataExfiltration,
+					Score:    0.70,
+					Evidence: fmt.Sprintf("possible %s: +%d more matches omitted (flood)",
+						r.label, len(locs)-matchFindingsCap),
+				})
+				break
+			}
 			out = append(out, &Finding{
 				Layer:    layerOutput,
 				Rule:     r.id,
@@ -332,17 +397,34 @@ func scanPII(text string) []*Finding {
 		}
 	}
 	if locs := piiCardPattern.FindAllStringIndex(text, -1); len(locs) > 0 {
+		var kept int
+		var dropped int
 		for _, loc := range locs {
-			if text[loc[0]:loc[1]] != "" && luhnValid(text[loc[0]:loc[1]]) {
-				out = append(out, &Finding{
-					Layer:    layerOutput,
-					Rule:     "PII-CARD",
-					Category: CategoryDataExfiltration,
-					Score:    0.85,
-					Span:     &Span{Start: loc[0], End: loc[1]},
-					Evidence: "possible payment_card_number: [REDACTED:payment_card_number]",
-				})
+			if text[loc[0]:loc[1]] == "" || !luhnValid(text[loc[0]:loc[1]]) {
+				continue
 			}
+			if kept >= matchFindingsCap {
+				dropped++
+				continue
+			}
+			out = append(out, &Finding{
+				Layer:    layerOutput,
+				Rule:     "PII-CARD",
+				Category: CategoryDataExfiltration,
+				Score:    0.85,
+				Span:     &Span{Start: loc[0], End: loc[1]},
+				Evidence: "possible payment_card_number: [REDACTED:payment_card_number]",
+			})
+			kept++
+		}
+		if dropped > 0 {
+			out = append(out, &Finding{
+				Layer:    layerOutput,
+				Rule:     "PII-CARD",
+				Category: CategoryDataExfiltration,
+				Score:    0.85,
+				Evidence: fmt.Sprintf("possible payment_card_number: +%d more matches omitted (flood)", dropped),
+			})
 		}
 	}
 	if len(out) == 0 {

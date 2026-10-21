@@ -35,7 +35,7 @@ func TestScanOutput_DetectsCanaryLeak(t *testing.T) {
 			system := InsertCanary("You are a helpful assistant.", canary)
 			output := tc.mutate(canary)
 
-			res := scanOutputLeak(system, output)
+			res := scanOutputLeak(system, output, false)
 			if got := res != nil; got != tc.wantLeak {
 				t.Errorf("scanOutputLeak found leak = %v, want %v (evidence: %v)", got, tc.wantLeak, evidenceOf(res))
 			}
@@ -46,7 +46,7 @@ func TestScanOutput_DetectsCanaryLeak(t *testing.T) {
 func TestScanOutput_NoCanaryInSystemMeansNoLeakCheck(t *testing.T) {
 	// A system prompt with no canary cannot leak one; the check must be
 	// inert rather than guessing.
-	if got := scanOutputLeak("You are a helpful assistant.", "PTP-whatever"); got != nil {
+	if got := scanOutputLeak("You are a helpful assistant.", "PTP-whatever", false); got != nil {
 		t.Errorf("scanOutputLeak flagged output against a canaryless system prompt: %v", evidenceOf(got))
 	}
 }
@@ -86,7 +86,7 @@ func TestNewCanary_ProducesValidSystemPrompt(t *testing.T) {
 	}
 	// The instruction must not itself look like an injection attempt, or
 	// it would trip our own scanner when scanned as untrusted text.
-	leak := scanOutputLeak(sys, "Something benign")
+	leak := scanOutputLeak(sys, "Something benign", false)
 	if leak != nil {
 		t.Errorf("InsertCanary produced a prompt that leaks itself: %v", evidenceOf(leak))
 	}

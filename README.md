@@ -150,9 +150,13 @@ raw input
 ScanOutput adds:  canary leak · secrets · PII
 ```
 
-Both the raw and the decoded form are scanned. Attackers split payloads
-to defeat single-pass checks, so an instruction hidden inside a base64
-wrapper is only visible after decoding.
+Both the raw input AND its whole-string decodings are scanned. Attackers
+split payloads to defeat single-pass checks, so an instruction hidden
+inside a base64 wrapper is only visible after decoding. The L1 layer
+also tries to recover encodings buried in surrounding text (markdown
+wrappers, JSON envelopes, code fences); for sensitive paths, prefer
+promptbuilder.Wrap on the input side because it is a stronger defense
+than relying on detection.
 
 Fusion has two independent terms:
 

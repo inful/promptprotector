@@ -23,18 +23,6 @@ import (
 // context through every call site.
 func contextBackground() context.Context { return context.Background() }
 
-// anyDash reports whether any element of paths is "-". runScan uses this
-// to decide whether to buffer stdin upfront so --system - can coexist
-// with a stdin-driven scan.
-func anyDash(paths []string) bool {
-	for _, p := range paths {
-		if p == "-" {
-			return true
-		}
-	}
-	return false
-}
-
 // printf writes to w, ignoring the error. Every use is diagnostic output
 // on a stream the caller already owns; there is nothing useful to do if
 // stderr itself has failed, and letting errcheck force a handler here
@@ -163,7 +151,14 @@ func runScan(c cli, stdin io.Reader, stdout, stderr io.Writer) int {
 	// scan source: a single stdin cannot be both at once. Either use
 	// positional paths for the output text or skip --system -.
 	systemFromStdin := c.Mode == "output" && c.System == "-"
-	if systemFromStdin && (len(c.Scan.Paths) == 0 || anyDash(c.Scan.Paths)) {
+	stdinInput := len(c.Scan.Paths) == 0
+	for _, p := range c.Scan.Paths {
+		if p == "-" {
+			stdinInput = true
+			break
+		}
+	}
+	if systemFromStdin && stdinInput {
 		printf(stderr, "pp: --system - and stdin input conflict; supply output paths or use a file for one of them\n")
 		return exitError
 	}

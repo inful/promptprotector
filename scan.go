@@ -148,7 +148,7 @@ func (d *Detector) ScanOutput(ctx context.Context, system, output string) (Resul
 	}
 
 	var findings []Finding
-	if f := scanOutputLeak(system, subject); f != nil {
+	if f := scanOutputLeak(system, subject, d.cfg.redactOutput); f != nil {
 		findings = append(findings, *f)
 	}
 	for _, f := range scanSecrets(subject, d.cfg.redactOutput) {
