@@ -10,8 +10,6 @@ import (
 // entropyOf is a test helper for asserting a fixture's Shannon entropy.
 func entropyOf(s string) float64 { return entropy.Shannon(s) }
 
-const layerL1 = "l1_normalize"
-
 func newTestConfig() config { return defaultConfig() }
 
 func findingsFor(res NormalizeResult, cat Category) []Finding {

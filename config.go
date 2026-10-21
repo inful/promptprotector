@@ -1,5 +1,22 @@
 package promptprotector
 
+import (
+	"log/slog"
+	"time"
+)
+
+// Layer names identify the pipeline stage that produced a Finding. They
+// appear in Result.Findings and Result.PipelineTrace.
+const (
+	// layerL1 is the normalize layer: decoding, unicode anomalies,
+	// entropy runs, context padding.
+	layerL1 = "l1_normalize"
+	// layerL2 is the ruleset layer: authored, corpus-tested patterns.
+	layerL2 = "l2_regex"
+	// layerOutput is the output-side layer: canary, secrets, PII.
+	layerOutput = "l3_output"
+)
+
 // config holds the tunable knobs for the detection pipeline. The zero
 // value is not usable — start from defaultConfig(). Functional options
 // (added in sub-phase 1F) populate a copy of it.
@@ -18,6 +35,19 @@ type config struct {
 	fusionCorrobWeight float64
 	warnAbove          float64
 	blockAbove         float64
+
+	// Rulesets used by ScanInput/ScanUntrusted respectively. Populated
+	// from the embedded defaults by newConfig, then replaced by
+	// WithRules/WithIndirectRules.
+	rules         Ruleset
+	indirectRules Ruleset
+
+	// redactOutput makes output findings replace matched values with a
+	// [REDACTED:<kind>] marker instead of retaining them.
+	redactOutput bool
+
+	timeout time.Duration
+	logger  *slog.Logger
 }
 
 func defaultConfig() config {
@@ -79,4 +109,9 @@ var l1BaseScores = map[Category]float64{
 	CategoryDelimiterFraming:    0.30,
 	CategoryInstructionOverride: 0.40,
 	CategoryContextPadding:      0.20,
+
+	// A leaked canary is proof the system prompt was disclosed, so it
+	// scores at full confidence rather than the 0.40 that covers the
+	// weaker prompt-leak rules (which only match the REQUEST for a leak).
+	CategoryCanaryLeak: 0.95,
 }

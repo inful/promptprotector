@@ -1,6 +1,7 @@
 package promptprotector
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 )
@@ -155,6 +156,11 @@ func summarize(findings []Finding) string {
 		s += f.Layer + "/" + f.Rule + "=" + string(f.Category)
 	}
 	return s
+}
+
+// encodeBase64 wraps a string for the encoded-attack fixtures.
+func encodeBase64(s string) string {
+	return base64.StdEncoding.EncodeToString([]byte(s))
 }
 
 // repeat returns n repetitions of unit.

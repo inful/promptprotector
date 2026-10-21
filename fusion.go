@@ -1,14 +1,13 @@
 package promptprotector
 
 import (
-	"encoding/base64"
 	"math"
 	"time"
 )
 
 // runPipeline executes L1 then L2 over an input and fuses the result into
-// a Decision. This is the internal engine; the exported Scan* functions
-// in scan.go are thin wrappers around it.
+// a Decision. This is the internal engine; the Detector in scan.go is a
+// thin wrapper around it.
 func runPipeline(input string, cfg config, rs Ruleset) Result {
 	start := time.Now()
 
@@ -93,6 +92,15 @@ func fuse(findings []Finding, cfg config) (float64, Decision) {
 		score = 1
 	}
 
+	if cfg.logger != nil {
+		cfg.logger.Debug("promptprotector scan",
+			"decision", decide(score, cfg),
+			"score", score,
+			"findings", len(findings),
+			"categories", len(bestByCat),
+		)
+	}
+
 	return score, decide(score, cfg)
 }
 
@@ -104,6 +112,12 @@ func layerConfidence(layer string) float64 {
 		return 1.0
 	case layerL1:
 		return 0.85
+	case layerOutput:
+		// An output finding is a CONFIRMED incident, not a probabilistic
+		// signal: a canary that appears in the response proves the system
+		// prompt leaked, and a prefixed credential is a live key. These
+		// are evidence, not risk estimates, so they are not discounted.
+		return 1.0
 	default:
 		return 0.85
 	}
@@ -151,9 +165,4 @@ func sortedValuesDesc(m map[Category]float64) []float64 {
 		}
 	}
 	return values
-}
-
-// encodeBase64 is a test-friendly helper for building wrapped attacks.
-func encodeBase64(s string) string {
-	return base64.StdEncoding.EncodeToString([]byte(s))
 }

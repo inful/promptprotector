@@ -1,0 +1,107 @@
+package promptprotector
+
+import (
+	"fmt"
+	"log/slog"
+	"time"
+)
+
+// Option customises a Detector. Options are applied to a copy of the
+// default configuration, so passing the same option to two Detectors
+// cannot make them interfere.
+type Option func(*config)
+
+// WithRules replaces the built-in ruleset. Pass the result of
+// ParseRuleset on your own ruleset text.
+//
+// Use this to tune the default ruleset in place:
+//
+//	base, _ := promptprotector.DefaultRuleset()
+//	base.Rules = append(base.Rules, myExtraRule)
+//	guard := promptprotector.New(promptprotector.WithRules(base))
+func WithRules(rs Ruleset) Option {
+	return func(c *config) { c.rules = rs }
+}
+
+// WithIndirectRules replaces the ruleset used by ScanUntrusted.
+func WithIndirectRules(rs Ruleset) Option {
+	return func(c *config) { c.indirectRules = rs }
+}
+
+// WithThresholds sets the Warn and Block cut-offs. Both must be in
+// [0,1] with warn <= block; an inverted pair is rejected by New.
+//
+// A stricter pairing suits a regulated domain; a looser one suits a
+// developer tool where a false positive costs more than a miss.
+func WithThresholds(warnAbove, blockAbove float64) Option {
+	return func(c *config) {
+		c.warnAbove = warnAbove
+		c.blockAbove = blockAbove
+	}
+}
+
+// WithDecodeDepth caps how many encoding layers L1 will peel. The default
+// is 3, which covers the overwhelming majority of real payloads while
+// bounding the work an attacker can force. Set 0 to disable decoding.
+func WithDecodeDepth(depth int) Option {
+	return func(c *config) { c.decodeDepth = depth }
+}
+
+// WithEntropyThreshold sets the bits/byte above which a window counts as
+// high entropy. Raise it toward 6.0 to detect binary blobs only; lower it
+// to catch more base64-of-text at the cost of false positives on dense
+// prose. Set to 0 to disable the entropy check.
+func WithEntropyThreshold(bits float64) Option {
+	return func(c *config) { c.entropyThreshold = bits }
+}
+
+// WithMaxInputBytes caps how much input is scanned. Input beyond the cap
+// is truncated and the result carries a truncation finding. Set 0 to
+// remove the cap.
+func WithMaxInputBytes(n int) Option {
+	return func(c *config) { c.maxInputBytes = n }
+}
+
+// WithRedaction enables secret and PII redaction in output findings.
+// Without it, matched values are retained in Evidence for audit, which
+// means Findings may then contain live credentials — only enable this
+// when the sink is trusted.
+func WithRedaction(on bool) Option {
+	return func(c *config) { c.redactOutput = on }
+}
+
+// WithTimeout bounds how long a scan may run. Zero means no bound.
+//
+// The pipeline is CPU-bound and currently finishes in ~1ms for 4KB
+// inputs, so this exists as a guard against pathological input rather
+// than as a normal tuning knob.
+func WithTimeout(d time.Duration) Option {
+	return func(c *config) { c.timeout = d }
+}
+
+// WithLogger attaches a logger. The detector logs at Debug for the
+// decisions it makes and never logs scanned content at any level — input
+// is untrusted and must not reach a log sink verbatim.
+func WithLogger(l *slog.Logger) Option {
+	return func(c *config) { c.logger = l }
+}
+
+// ErrInvalidConfig is returned by New for a contradictory configuration.
+var ErrInvalidConfig = fmt.Errorf("invalid configuration")
+
+func validateConfig(c *config) error {
+	switch {
+	case c.warnAbove < 0 || c.warnAbove > 1:
+		return fmt.Errorf("%w: warnAbove must be in [0,1], got %v", ErrInvalidConfig, c.warnAbove)
+	case c.blockAbove < 0 || c.blockAbove > 1:
+		return fmt.Errorf("%w: blockAbove must be in [0,1], got %v", ErrInvalidConfig, c.blockAbove)
+	case c.warnAbove > c.blockAbove:
+		return fmt.Errorf("%w: warnAbove (%v) must not exceed blockAbove (%v)",
+			ErrInvalidConfig, c.warnAbove, c.blockAbove)
+	case c.decodeDepth < 0:
+		return fmt.Errorf("%w: decodeDepth must be >= 0, got %d", ErrInvalidConfig, c.decodeDepth)
+	case c.entropyThreshold < 0:
+		return fmt.Errorf("%w: entropyThreshold must be >= 0, got %v", ErrInvalidConfig, c.entropyThreshold)
+	}
+	return nil
+}

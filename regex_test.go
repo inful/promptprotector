@@ -2,8 +2,6 @@ package promptprotector
 
 import "testing"
 
-const layerL2 = "l2_regex"
-
 func mustDefaultRuleset(t *testing.T) Ruleset {
 	t.Helper()
 	rs, err := DefaultRuleset()

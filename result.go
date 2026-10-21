@@ -92,6 +92,11 @@ const (
 	// separator fences to push a target instruction past a context
 	// window or dilute it below salience.
 	CategoryContextPadding Category = "context_padding"
+	// CategoryCanaryLeak marks model output containing the system
+	// prompt's canary token. Unlike the other prompt_leak signals this
+	// is confirmation rather than suspicion: the token was planted by
+	// InsertCanary and has no legitimate reason to appear in a response.
+	CategoryCanaryLeak Category = "canary_leak"
 )
 
 // Span is a half-open byte range [Start, End) within the text a Finding
