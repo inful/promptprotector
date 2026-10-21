@@ -17,3 +17,6 @@ Thumbs.db
 
 # Local overrides
 lefthook-local.yml
+
+# Working docs (not part of the project record)
+/PLAN.md
