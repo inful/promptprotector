@@ -88,6 +88,10 @@ const (
 	// CategoryHighEntropy marks input containing a span whose Shannon
 	// entropy indicates compressed, encrypted, or binary content.
 	CategoryHighEntropy Category = "high_entropy"
+	// CategoryContextPadding marks input padded with repeated lines or
+	// separator fences to push a target instruction past a context
+	// window or dilute it below salience.
+	CategoryContextPadding Category = "context_padding"
 )
 
 // Span is a half-open byte range [Start, End) within the text a Finding

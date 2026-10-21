@@ -6,6 +6,7 @@ import (
 
 	"github.com/inful/promptprotector/internal/encoders"
 	"github.com/inful/promptprotector/internal/entropy"
+	"github.com/inful/promptprotector/internal/padding"
 	"github.com/inful/promptprotector/internal/unicode"
 )
 
@@ -44,6 +45,7 @@ func normalize(raw string, cfg config) NormalizeResult {
 	for _, form := range scanForms(subject, res.Decoded) {
 		res.Findings = append(res.Findings, unicodeFindings(form.label, form.text)...)
 		res.Findings = append(res.Findings, entropyFindings(cfg, form)...)
+		res.Findings = append(res.Findings, paddingFindings(cfg, form)...)
 	}
 
 	if res.Truncated {
@@ -117,6 +119,33 @@ func entropyFindings(cfg config, f form) []Finding {
 		Span:     &Span{Start: run.Start, End: run.End},
 		Evidence: fmt.Sprintf("%s: %.2f bits/byte over %d bytes", f.label, run.Entropy, run.End-run.Start),
 	}}
+}
+
+// paddingFindings emits context-padding findings for repeated-line and
+// separator-fence anomalies. These were folded in from the planned L3
+// structural layer, which was redundant with L1 and L2 except for this
+// detector — see the PLAN.md note on the 1E scope reduction.
+func paddingFindings(cfg config, f form) []Finding {
+	th := padding.Default()
+	th.MinRepeats = cfg.paddingMinRepeats
+	th.MinFenceLines = cfg.paddingMinFences
+
+	spans := padding.Detect(f.text, th)
+	if len(spans) == 0 {
+		return nil
+	}
+	out := make([]Finding, 0, len(spans))
+	for _, s := range spans {
+		out = append(out, Finding{
+			Layer:    layerL1,
+			Rule:     string(s.Kind),
+			Category: CategoryContextPadding,
+			Score:    l1BaseScores[CategoryContextPadding],
+			Span:     &Span{Start: s.Start, End: s.End},
+			Evidence: fmt.Sprintf("%s: %s over %d lines", f.label, s.Detail, s.Lines),
+		})
+	}
+	return out
 }
 
 // unicodeCategoryFor maps an internal unicode detector name to a public

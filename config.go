@@ -4,10 +4,20 @@ package promptprotector
 // value is not usable — start from defaultConfig(). Functional options
 // (added in sub-phase 1F) populate a copy of it.
 type config struct {
-	decodeDepth      int
-	entropyWindow    int
-	entropyThreshold float64
-	maxInputBytes    int
+	decodeDepth       int
+	entropyWindow     int
+	entropyThreshold  float64
+	maxInputBytes     int
+	paddingMinRepeats int
+	paddingMinFences  int
+
+	// Fusion weights and thresholds. fusionMaxWeight and
+	// fusionCorrobWeight are the two terms of the fused score and must
+	// sum to at most 1 so the score cannot exceed the unit range.
+	fusionMaxWeight    float64
+	fusionCorrobWeight float64
+	warnAbove          float64
+	blockAbove         float64
 }
 
 func defaultConfig() config {
@@ -24,6 +34,21 @@ func defaultConfig() config {
 		// binary blobs only.
 		entropyThreshold: 5.0,
 		maxInputBytes:    32 << 10, // 32 KiB
+
+		paddingMinRepeats: 5,
+		paddingMinFences:  10,
+
+		// The two fusion terms must sum to <= 1 so the fused score cannot
+		// exceed the unit range. 0.7/0.3 favours a single strong signal
+		// while still letting corroboration tip a borderline case.
+		fusionMaxWeight:    0.7,
+		fusionCorrobWeight: 0.3,
+
+		// Decision thresholds. warnAbove is deliberately high enough that
+		// one weak structural signal alone stays out of Warn territory;
+		// blockAbove sits where a high-confidence authored rule lands.
+		warnAbove:  0.25,
+		blockAbove: 0.50,
 	}
 }
 
@@ -53,4 +78,5 @@ var l1BaseScores = map[Category]float64{
 	CategoryHighEntropy:         0.20,
 	CategoryDelimiterFraming:    0.30,
 	CategoryInstructionOverride: 0.40,
+	CategoryContextPadding:      0.20,
 }
