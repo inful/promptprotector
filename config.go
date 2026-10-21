@@ -99,17 +99,19 @@ type NormalizeResult struct {
 // Encoding attack scores highest because a successfully decoded payload
 // is unambiguous evidence that someone deliberately obfuscated the text.
 var l1BaseScores = map[Category]float64{
-	CategoryEncodingAttack:      0.35,
-	CategoryRTLOverride:         0.30,
-	CategoryZeroWidth:           0.25,
-	CategoryHomoglyph:           0.30,
-	CategoryHighEntropy:         0.20,
-	CategoryDelimiterFraming:    0.30,
-	CategoryInstructionOverride: 0.40,
-	CategoryContextPadding:      0.20,
-
+	CategoryEncodingAttack: 0.35,
+	CategoryRTLOverride:    0.30,
+	CategoryZeroWidth:      0.25,
+	CategoryHomoglyph:      0.30,
+	CategoryHighEntropy:    0.20,
+	CategoryContextPadding: 0.20,
 	// A leaked canary is proof the system prompt was disclosed, so it
 	// scores at full confidence rather than the 0.40 that covers the
 	// weaker prompt-leak rules (which only match the REQUEST for a leak).
 	CategoryCanaryLeak: 0.95,
+	// Truncation is a notice, not evidence. Deliberately below warnAbove
+	// (0.25) so exceeding maxInputBytes never, on its own, flags a
+	// document as suspicious — an earlier version scored it 0.35 as an
+	// encoding attack and warned on ordinary large input.
+	CategoryInputTruncated: 0.05,
 }

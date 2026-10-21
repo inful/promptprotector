@@ -119,7 +119,7 @@ func TestNormalize_ScansBothRawAndDecodedForms(t *testing.T) {
 	// The *decoded* form hides a homoglyph; the raw form is clean ASCII.
 	// Both forms must be scanned, so the homoglyph is found even though
 	// the attacker wrapped it in base64.
-	raw := "0J/RgNC40LLQtdGC9C4gYQ==" // base64 of "аdmin" with a Cyrillic а
+	raw := "0LBkbWlu" // base64 of "аdmin" with a Cyrillic а
 	res := normalize(raw, newTestConfig())
 
 	homoglyphs := findingsFor(res, CategoryHomoglyph)

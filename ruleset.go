@@ -120,6 +120,7 @@ func splitBlocks(src string) []string {
 func parseBlock(block string, blockNum int) (*Rule, error) {
 	rule := &Rule{}
 	var haveWeight bool
+	seen := map[string]bool{}
 
 	for _, line := range strings.Split(block, "\n") {
 		key, value, ok := strings.Cut(line, ":")
@@ -128,6 +129,15 @@ func parseBlock(block string, blockNum int) (*Rule, error) {
 		}
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
+
+		// Duplicate keys are silently last-wins otherwise — a rule
+		// author who wrote 0.2 then 0.9 by accident would get 0.9
+		// with no warning, defeating the "fail loudly on typos"
+		// contract the rest of this parser enforces.
+		if seen[key] {
+			return nil, fmt.Errorf("%w: rule %q: duplicate key %q", ErrInvalidRuleset, rule.ID, key)
+		}
+		seen[key] = true
 
 		switch key {
 		case "id":

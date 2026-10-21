@@ -56,8 +56,8 @@ func normalize(raw string, cfg config) NormalizeResult {
 		res.Findings = append(res.Findings, Finding{
 			Layer:    layerL1,
 			Rule:     "input_truncated",
-			Category: CategoryEncodingAttack,
-			Score:    l1BaseScores[CategoryEncodingAttack],
+			Category: CategoryInputTruncated,
+			Score:    l1BaseScores[CategoryInputTruncated],
 			Evidence: fmt.Sprintf("input exceeded %d bytes; scanned the prefix only", cfg.maxInputBytes),
 		})
 	}

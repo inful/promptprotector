@@ -36,21 +36,77 @@ var l1Decoders = []l1Decoder{
 // payload). The function is total on its domain — errors from a single
 // decoder (invalid base64 input) are silently treated as "did not apply"
 // and the loop continues.
+//
+// A decode only counts if it yields TEXT. Base64, hex and percent-encoding
+// all round-trip arbitrary bytes, so "the input was valid base64" proves
+// nothing: a long run of base64-alphabet characters ("x"*100000, a padded
+// identifier, a log blob) decodes to binary noise and was previously
+// reported as an obfuscation attack. An attacker wrapping a prompt in
+// base64 needs the TEXT to survive, so requiring it costs no recall and
+// removes the false positive.
 func RecursiveDecode(s string, maxDepth int) (string, []string) {
 	var chain []string
 	for round := 0; round < maxDepth; round++ {
 		prev := s
 		for _, d := range l1Decoders {
 			out, err := d.fn(s)
-			if err == nil && out != s {
-				chain = append(chain, d.name)
-				s = out
-				break
+			if err != nil || out == s || !isText(out) {
+				continue
 			}
+			chain = append(chain, d.name)
+			s = out
+			break
 		}
 		if s == prev {
 			break
 		}
 	}
 	return s, chain
+}
+
+// textAsciiRatio is the share of runes a decode must have in the ASCII
+// range before it counts as text.
+//
+// A printable-ratio test alone is not enough: "a"*40000 is valid base64
+// and decodes to the repeating rune sequence U+0069 U+019A U+0069 U+019A
+// — every rune printable — so it still looked like text. Requiring ASCII
+// separates real wrapped text from byte soup that happens to land on
+// valid UTF-8 code points.
+//
+// 0.7 is comfortably above uniform-random bytes (~0.375 of the byte
+// range is printable ASCII) and comfortably below ordinary text with
+// accented characters.
+const textASCIIRatio = 0.7
+
+// isText reports whether s looks like human-readable text rather than
+// decoded binary. It samples the head and tail only: the decision does
+// not need to be exact, and a multi-megabyte decode should not cost a
+// full scan.
+func isText(s string) bool {
+	const sample = 512
+	head, tail := s, ""
+	if len(s) > 2*sample {
+		head, tail = s[:sample], s[len(s)-sample:]
+	} else if len(s) > sample {
+		head = s[:sample]
+	}
+	return asciiRatio(head) >= textASCIIRatio && asciiRatio(tail) >= textASCIIRatio
+}
+
+// asciiRatio returns the share of runes in s that are printable ASCII or
+// common whitespace. Invalid UTF-8 (the signature of decoded binary)
+// counts as non-ASCII.
+func asciiRatio(s string) float64 {
+	if s == "" {
+		return 1
+	}
+	ascii := 0
+	total := 0
+	for _, r := range s {
+		total++
+		if r == '\n' || r == '\r' || r == '\t' || (r >= 0x20 && r < 0x7f) {
+			ascii++
+		}
+	}
+	return float64(ascii) / float64(total)
 }

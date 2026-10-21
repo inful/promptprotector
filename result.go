@@ -97,6 +97,11 @@ const (
 	// is confirmation rather than suspicion: the token was planted by
 	// InsertCanary and has no legitimate reason to appear in a response.
 	CategoryCanaryLeak Category = "canary_leak"
+	// CategoryInputTruncated marks input that exceeded the configured
+	// size cap and was only partially scanned. It is an operational
+	// notice, not evidence of an attack, and scores below warnAbove so
+	// a large-but-benign document is not flagged on size alone.
+	CategoryInputTruncated Category = "input_truncated"
 )
 
 // Span is a half-open byte range [Start, End) within the text a Finding

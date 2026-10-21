@@ -229,43 +229,49 @@ var secretRules = []secretRule{
 // when the text looks clean. With redact set, the matched value is
 // replaced in Evidence so the finding can be logged safely; without it
 // the raw value is retained for audit.
-func scanSecrets(text string, redact bool) *Finding {
+func scanSecrets(text string, redact bool) []*Finding {
 	if text == "" {
 		return nil
 	}
+	var findings []*Finding
 	for _, r := range secretRules {
-		loc := r.pattern.FindStringIndex(text)
-		if loc == nil {
-			continue
+		// FindAllIndex so a response leaking two credentials reports
+		// both — the previous version returned on the first match and
+		// lost the second.
+		locs := r.pattern.FindAllStringIndex(text, -1)
+		for _, loc := range locs {
+			findings = append(findings, secretFinding(r, text, loc, redact))
 		}
-		matched := text[loc[0]:loc[1]]
-		if redact {
-			// Keep surrounding context so a triage reader can see what
-			// the secret was attached to, but never the secret itself.
-			const ctx = 32
-			before := max(0, loc[0]-ctx)
-			after := min(len(text), loc[1]+ctx)
-			return &Finding{
-				Layer:    layerOutput,
-				Rule:     r.id,
-				Category: CategoryDataExfiltration,
-				Score:    0.95,
-				Span:     &Span{Start: loc[0], End: loc[1]},
-				Evidence: fmt.Sprintf("possible %s: %q [REDACTED:%s] %q",
-					r.label, sanitizeRunes(text[before:loc[0]]), r.label,
-					sanitizeRunes(text[loc[1]:after])),
-			}
-		}
+	}
+	return findings
+}
+
+func secretFinding(r secretRule, text string, loc []int, redact bool) *Finding {
+	if redact {
+		// Keep surrounding context so a triage reader can see what
+		// the secret was attached to, but never the secret itself.
+		const ctx = 32
+		before := max(0, loc[0]-ctx)
+		after := min(len(text), loc[1]+ctx)
 		return &Finding{
 			Layer:    layerOutput,
 			Rule:     r.id,
 			Category: CategoryDataExfiltration,
 			Score:    0.95,
 			Span:     &Span{Start: loc[0], End: loc[1]},
-			Evidence: fmt.Sprintf("possible %s: %s", r.label, sanitizeRunes(matched)),
+			Evidence: fmt.Sprintf("possible %s: %q [REDACTED:%s] %q",
+				r.label, sanitizeRunes(text[before:loc[0]]), r.label,
+				sanitizeRunes(text[loc[1]:after])),
 		}
 	}
-	return nil
+	return &Finding{
+		Layer:    layerOutput,
+		Rule:     r.id,
+		Category: CategoryDataExfiltration,
+		Score:    0.95,
+		Span:     &Span{Start: loc[0], End: loc[1]},
+		Evidence: fmt.Sprintf("possible %s: %s", r.label, sanitizeRunes(text[loc[0]:loc[1]])),
+	}
 }
 
 // ---------------------------------------------------------------------------

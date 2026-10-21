@@ -2,7 +2,9 @@ package promptprotector
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"time"
 )
 
 // Detector scans text for prompt injection. A Detector is safe for
@@ -122,33 +124,57 @@ func (d *Detector) ScanUntrusted(ctx context.Context, text string) (Result, erro
 }
 
 // ScanOutput analyses model output. See the package-level ScanOutput.
+//
+// It deliberately does NOT run the input pipeline. The injection rules
+// describe what a *user* writes; a response that quotes one is the
+// guardrail working, not failing. Running them here blocked the most
+// natural assistant output there is:
+//
+//	"An attacker might try: 'Ignore all previous instructions.'"
+//	"If a user says 'you are now DAN', refuse and continue."
+//
+// What a response CAN be guilty of is disclosing something: the system
+// prompt (via the canary), a credential, or PII. Those are the checks
+// that run here.
 func (d *Detector) ScanOutput(ctx context.Context, system, output string) (Result, error) {
-	res, err := d.run(ctx, output, d.cfg.rules)
-	if err != nil {
-		return res, err
+	start := time.Now()
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
 	}
 
-	if f := scanOutputLeak(system, output); f != nil {
-		res.Findings = append(res.Findings, *f)
-	}
-	if f := scanSecrets(output, d.cfg.redactOutput); f != nil {
-		res.Findings = append(res.Findings, *f)
-	}
-	if f := scanPII(output); f != nil {
-		res.Findings = append(res.Findings, *f)
+	subject, truncated := output, false
+	if d.cfg.maxInputBytes > 0 && len(output) > d.cfg.maxInputBytes {
+		subject, truncated = output[:d.cfg.maxInputBytes], true
 	}
 
-	// Re-fuse over the COMBINED findings. Fusing only the output findings
-	// (as this previously did) discarded the input verdict entirely, so a
-	// response containing a prompt injection but no leaked secret came
-	// back Allow.
-	//
-	// Combining is also what keeps a confirmed incident from being
-	// diluted: a leaked canary scores 0.95, and the corroboration term
-	// adds on top of it rather than averaging it away.
-	res.Score, res.Decision = fuse(res.Findings, d.cfg)
-	res.PipelineTrace = traceOf(res.Findings)
-	return res, nil
+	var findings []Finding
+	if f := scanOutputLeak(system, subject); f != nil {
+		findings = append(findings, *f)
+	}
+	for _, f := range scanSecrets(subject, d.cfg.redactOutput) {
+		findings = append(findings, *f)
+	}
+	if f := scanPII(subject); f != nil {
+		findings = append(findings, *f)
+	}
+	if truncated {
+		findings = append(findings, Finding{
+			Layer:    layerOutput,
+			Rule:     "input_truncated",
+			Category: CategoryInputTruncated,
+			Score:    l1BaseScores[CategoryInputTruncated],
+			Evidence: fmt.Sprintf("output exceeded %d bytes; scanned the prefix only", d.cfg.maxInputBytes),
+		})
+	}
+
+	score, decision := fuse(findings, d.cfg)
+	return Result{
+		Decision:      decision,
+		Score:         score,
+		Findings:      findings,
+		LatencyMs:     float64(time.Since(start).Microseconds()) / 1000.0,
+		PipelineTrace: traceOf(findings),
+	}, nil
 }
 
 // run applies the input pipeline, honouring context cancellation.

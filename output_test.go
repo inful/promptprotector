@@ -103,7 +103,7 @@ func TestSecretScan_IgnoresVariableNames(t *testing.T) {
 	}
 	for _, s := range benign {
 		if got := scanSecrets(s, false); got != nil {
-			t.Errorf("scanSecrets falsely flagged %q: %v", s, evidenceOf(got))
+			t.Errorf("scanSecrets falsely flagged %q: %v", s, evidenceOf(got[0]))
 		}
 	}
 }
@@ -141,7 +141,7 @@ func TestSecretScan_DetectsKnownPrefixes(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := scanSecrets(tc.input, false); got == nil {
+			if got := scanSecrets(tc.input, false); len(got) == 0 {
 				t.Errorf("scanSecrets missed %s (%d chars)", tc.name, len(tc.input))
 			}
 		})
@@ -166,16 +166,16 @@ func TestSecretFixturesMatchTheRealFormats(t *testing.T) {
 func TestSecretScan_RedactionPreservesSurroundingText(t *testing.T) {
 	input := "Here is the key " + awsKeyID + " for your reference."
 	got := scanSecrets(input, true)
-	if got == nil {
+	if len(got) == 0 {
 		t.Fatal("scanSecrets found nothing")
 	}
-	if strings.Contains(got.Evidence, awsKeyID) {
+	if strings.Contains(got[0].Evidence, awsKeyID) {
 		t.Error("redacted evidence still contains the raw secret")
 	}
-	if !strings.Contains(got.Evidence, "Here is the key") {
+	if !strings.Contains(got[0].Evidence, "Here is the key") {
 		t.Error("redacted evidence dropped the surrounding context")
 	}
-	if !strings.Contains(got.Evidence, "[REDACTED") {
+	if !strings.Contains(got[0].Evidence, "[REDACTED") {
 		t.Error("redacted evidence has no redaction marker")
 	}
 }
@@ -183,10 +183,10 @@ func TestSecretScan_RedactionPreservesSurroundingText(t *testing.T) {
 func TestSecretScan_NoRedactionKeepsValueForAudit(t *testing.T) {
 	input := "key " + awsKeyID + " here"
 	got := scanSecrets(input, false)
-	if got == nil {
+	if len(got) == 0 {
 		t.Fatal("scanSecrets found nothing")
 	}
-	if !strings.Contains(got.Evidence, awsKeyID) {
+	if !strings.Contains(got[0].Evidence, awsKeyID) {
 		t.Error("audit mode should retain the matched value in evidence")
 	}
 }
@@ -197,7 +197,7 @@ func TestSecretScan_TriggersBearerAndJWT(t *testing.T) {
 		"token: Bearer sk_live_" + "4eC39HqLyjWDarjtT1zdp7dc",
 	}
 	for _, c := range cases {
-		if got := scanSecrets(c, false); got == nil {
+		if got := scanSecrets(c, false); len(got) == 0 {
 			t.Errorf("scanSecrets missed bearer token in %q", c)
 		}
 	}
