@@ -2,7 +2,6 @@ package promptprotector
 
 import (
 	"log/slog"
-	"time"
 )
 
 // Layer names identify the pipeline stage that produced a Finding. They
@@ -46,8 +45,7 @@ type config struct {
 	// [REDACTED:<kind>] marker instead of retaining them.
 	redactOutput bool
 
-	timeout time.Duration
-	logger  *slog.Logger
+	logger *slog.Logger
 }
 
 func defaultConfig() config {

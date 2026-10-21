@@ -5,33 +5,6 @@ import (
 	"testing"
 )
 
-func TestSpan_HasCategory(t *testing.T) {
-	anomalies := []Anomaly{
-		{Category: "zero_width"},
-		{Category: "rtl_override"},
-	}
-	if !HasCategory(anomalies, "zero_width") {
-		t.Errorf("HasCategory should find zero_width")
-	}
-	if HasCategory(anomalies, "homoglyph") {
-		t.Errorf("HasCategory should not find homoglyph")
-	}
-}
-
-func TestSpan_SpansFor(t *testing.T) {
-	want := []Span{{Start: 1, End: 4}}
-	anomalies := []Anomaly{
-		{Category: "zero_width", Spans: want},
-	}
-	got := SpansFor(anomalies, "zero_width")
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("SpansFor = %v, want %v", got, want)
-	}
-	if got := SpansFor(anomalies, "homoglyph"); got != nil {
-		t.Errorf("SpansFor(missing) = %v, want nil", got)
-	}
-}
-
 func TestZeroWidth_NoSpansReturnsNil(t *testing.T) {
 	if got := ZeroWidth("hello world"); got != nil {
 		t.Errorf("ZeroWidth(plain) = %v, want nil", got)
@@ -158,16 +131,21 @@ func TestScan_AllClearReturnsNil(t *testing.T) {
 
 func TestScan_DetectsMultipleCategories(t *testing.T) {
 	// "ab\u202E\u200Bc\u0430d" — RLO, ZWSP, and Cyrillic 'а'.
-	anomalies := Scan("ab\u202E\u200Bc\u0430d")
-	if !HasCategory(anomalies, "rtl_override") {
-		t.Errorf("Scan should report rtl_override")
+	want := []string{"zero_width", "rtl_override", "homoglyph"}
+	got := categoriesOf(Scan("ab\u202E\u200Bc\u0430d"))
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("Scan categories = %v, want %v", got, want)
 	}
-	if !HasCategory(anomalies, "zero_width") {
-		t.Errorf("Scan should report zero_width")
+}
+
+// categoriesOf extracts the category names, replacing the deleted
+// HasCategory helper at its one remaining call site.
+func categoriesOf(anomalies []Anomaly) []string {
+	out := make([]string, 0, len(anomalies))
+	for _, a := range anomalies {
+		out = append(out, a.Category)
 	}
-	if !HasCategory(anomalies, "homoglyph") {
-		t.Errorf("Scan should report homoglyph")
-	}
+	return out
 }
 
 func TestScan_CategoryOrderIsStable(t *testing.T) {

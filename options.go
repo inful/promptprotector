@@ -70,13 +70,18 @@ func WithRedaction(on bool) Option {
 	return func(c *config) { c.redactOutput = on }
 }
 
-// WithTimeout bounds how long a scan may run. Zero means no bound.
+// WithTimeout is accepted and ignored.
 //
-// The pipeline is CPU-bound and currently finishes in ~1ms for 4KB
-// inputs, so this exists as a guard against pathological input rather
-// than as a normal tuning knob.
-func WithTimeout(d time.Duration) Option {
-	return func(c *config) { c.timeout = d }
+// The pipeline is CPU-bound string work with no blocking call, so a
+// context cannot interrupt it: an earlier implementation ran the scan in
+// a goroutine and returned on ctx.Done(), which leaked the goroutine and
+// kept the CPU busy rather than cancelling anything. Bounding a scan is
+// WithMaxInputBytes's job.
+//
+// It remains in the API so existing call sites keep compiling, and so
+// this behaviour is documented rather than surprising.
+func WithTimeout(time.Duration) Option {
+	return func(*config) {}
 }
 
 // WithLogger attaches a logger. The detector logs at Debug for the

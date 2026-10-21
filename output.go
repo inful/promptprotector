@@ -64,14 +64,25 @@ func scanOutputLeak(system, output string) *Finding {
 	if i := strings.Index(output, canary); i >= 0 {
 		return canaryFinding(fmt.Sprintf("canary %q appeared verbatim at byte %d", canary, i), false)
 	}
-	if fuzzyContains(output, canary, leakTolerance) {
+	if len(output) <= fuzzyMatchCeiling && fuzzyContains(output, canary, leakTolerance) {
 		return canaryFinding(fmt.Sprintf("canary %q appeared within edit distance %d", canary, leakTolerance), true)
 	}
 	return nil
 }
 
+// minCanaryHexLen is the shortest token extractCanary will accept.
+// NewCanary always produces 32 hex characters, so requiring 16 leaves
+// ample margin while rejecting identifiers like "PTP-1234" that merely
+// appear in prose.
+const minCanaryHexLen = 16
+
 // extractCanary pulls the token out of a system prompt by locating the
 // canaryPrefix inside the directive.
+//
+// The length floor matters: without it any product identifier that happens
+// to start with "PTP-" became a canary, so a system prompt documenting a
+// PTP-1234 route code and a response echoing that code scored a 0.95
+// confirmed leak and blocked. A real canary is always long.
 func extractCanary(system string) string {
 	i := strings.Index(system, canaryPrefix)
 	if i < 0 {
@@ -83,7 +94,7 @@ func extractCanary(system string) string {
 	for end < len(rest) && isHexDigit(rest[end]) {
 		end++
 	}
-	if end == 0 {
+	if end < minCanaryHexLen {
 		return ""
 	}
 	return system[i : i+len(canaryPrefix)+end]
@@ -107,6 +118,16 @@ func canaryFinding(evidence string, fuzzy bool) *Finding {
 	}
 }
 
+// fuzzyMatchCeiling bounds the input size for fuzzy canary matching.
+// Exact matching is a single strings.Index and runs on any input; the
+// fuzzy fallback is quadratic per window, and output is typically the
+// largest string in the system (a long completion, partly attacker-
+// influenced via RAG). Measured on a 'P'-heavy string the fuzzy path
+// cost 10ms at 10KB, 74ms at 100KB and 281ms at 400KB. Above the
+// ceiling we fall back to exact-only, which still catches the
+// security-relevant case: a verbatim leak.
+const fuzzyMatchCeiling = 64 << 10
+
 // fuzzyContains reports whether needle appears in haystack within
 // maxDist edits. Only windows of len(needle) are compared, so the cost is
 // O(len(haystack) * len(needle) * maxDist).
@@ -115,11 +136,14 @@ func fuzzyContains(haystack, needle string, maxDist int) bool {
 	if n == 0 || len(haystack) < n-maxDist {
 		return false
 	}
-	// A cheap length-agnostic prefilter: the window must share its first
-	// byte with the needle, or be within maxDist edits of doing so.
+	// Prefilter on the first two bytes. One byte is far too weak: the
+	// canary starts "PTP-", so a single-byte test fires on any window
+	// beginning with 'P' and ran the full distance matrix for each.
+	// Requiring two shared leading bytes cuts the candidate set sharply
+	// while keeping the transposition case fuzzy matching exists to catch.
 	for i := 0; i+n <= len(haystack); i++ {
 		w := haystack[i : i+n]
-		if w[0] == needle[0] && levenshteinWithin(w, needle, maxDist) {
+		if w[0] == needle[0] && w[1] == needle[1] && levenshteinWithin(w, needle, maxDist) {
 			return true
 		}
 	}
@@ -250,8 +274,13 @@ func scanSecrets(text string, redact bool) *Finding {
 
 var piiRules = []secretRule{
 	{"PII-EMAIL", "email", regexp.MustCompile(`\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b`)},
+	// Phone numbers require an explicit international prefix or a
+	// parenthesised area code. A bare "123-456-7890" is deliberately NOT
+	// matched: that shape is far more often an order number, account
+	// number, or reference code, and this scanner reads model output,
+	// which is exactly where those appear.
 	{"PII-INTL-PHONE", "phone", regexp.MustCompile(`\+[1-9]\d{0,2}[\s.-]?\(?\d{1,4}\)?[\s.-]?\d{2,4}[\s.-]?\d{2,4}\b`)},
-	{"PII-US-PHONE", "phone", regexp.MustCompile(`\(?\b\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b`)},
+	{"PII-US-PHONE", "phone", regexp.MustCompile(`\(\d{3}\)\s?\d{3}[\s.-]\d{4}\b`)},
 }
 
 // piiCardPattern matches a bare 13-19 digit run; the Luhn check in

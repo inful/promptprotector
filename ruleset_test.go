@@ -157,27 +157,3 @@ func TestParseRuleset_PreservesSourceOrder(t *testing.T) {
 		t.Errorf("rule order = [%s %s], want [PI-001 JB-001]", rs.Rules[0].ID, rs.Rules[1].ID)
 	}
 }
-
-func TestRuleset_Strictest(t *testing.T) {
-	// Strictest returns the rule with the highest weight, which is the
-	// one that should dominate a fused score for this input.
-	src := sampleRuleset
-	rs, err := ParseRuleset(src)
-	if err != nil {
-		t.Fatalf("ParseRuleset returned error: %v", err)
-	}
-	best := rs.Strictest()
-	if best == nil {
-		t.Fatal("Strictest() returned nil for a non-empty ruleset")
-	}
-	if best.Weight != 0.95 {
-		t.Errorf("Strictest().Weight = %v, want 0.95", best.Weight)
-	}
-}
-
-func TestRuleset_StrictestOnEmptyIsNil(t *testing.T) {
-	rs := Ruleset{}
-	if got := rs.Strictest(); got != nil {
-		t.Errorf("Strictest() on empty = %v, want nil", got)
-	}
-}

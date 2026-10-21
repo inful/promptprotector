@@ -1,20 +1,42 @@
 // Package promptprotector provides layered detection for prompt-injection
 // attempts in Go LLM applications.
 //
-// The pipeline runs every input through four deterministic layers and one
-// optional escalation tier:
+// # Pipeline
 //
-//	L1 normalize   recursive decoding (base64/hex/url/rot13/unicode-escape)
-//	               and zero-width / RTL / homoglyph cleanup.
-//	L2 regex       a YAML-driven ruleset tagged by OWASP LLM01:2025
-//	               categories, with per-rule weights and ceilings.
-//	L3 structural  entropy, special-token presence, delimiter frames,
-//	               unicode-category anomalies.
-//	L4 fusion      weighted score + per-category corroboration bonus,
-//	               mapped to Allow / Warn / Block thresholds.
-//	L6 decide      opt-in escalation via github.com/inful/decide for
-//	               ambiguous cases (score in the 0.4-0.7 band).
+// Every input passes through L1 then L2, and the findings are fused into
+// a single score mapped to Allow, Warn, or Block:
 //
-// Phase 0 establishes the module so downstream tooling (lint, formatter,
-// importer) has a Go file to analyse. The public API lands in Phase 1.
+//	L1 normalize   recursive decode (base64/hex/percent/unicode-escape),
+//	               zero-width and RTL-override characters, homoglyphs,
+//	               Shannon-entropy runs, and context padding. Emits
+//	               mechanism categories (encoding_attack, zero_width,
+//	               rtl_override, homoglyph, high_entropy,
+//	               context_padding).
+//	L2 regex       the ruleset — see DefaultRuleset and ParseRuleset —
+//	               matched against both the raw and the decoded form.
+//	               Emits intent categories (instruction_override,
+//	               role_hijack, prompt_leak, delimiter_framing,
+//	               data_exfiltration, social_engineering).
+//
+// ScanOutput adds an output-side check for canary leaks, secrets, and
+// PII. See the package-level ScanInput, ScanUntrusted, and ScanOutput.
+//
+// # Fusion
+//
+//	score = maxSignal * 0.7 + corroboration * 0.3
+//
+// maxSignal is the strongest single finding, scaled by layer confidence so
+// a pile of weak heuristics cannot outvote one authored rule. corroboration
+// sums the best hit per distinct category with diminishing returns, which
+// is what separates a single odd character from an obfuscation campaign.
+//
+// # Scope
+//
+// This package guards prompt INJECTION, not harmful content. Classifying
+// "how do I make a bomb" is content moderation, a different product.
+//
+// It raises the cost of an attack; it does not prevent one. Every
+// published detector is bypassed by adversarial encoding, paraphrase, or
+// character injection. Pair it with least-privilege tool scopes,
+// role-tagged messaging, output validation, and promptbuilder.Wrap.
 package promptprotector

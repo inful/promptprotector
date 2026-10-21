@@ -76,7 +76,7 @@ func TestNewCanary_ProducesValidSystemPrompt(t *testing.T) {
 		t.Fatalf("NewCanary error: %v", err)
 	}
 	sys := InsertCanary("You are a helpful assistant.", canary)
-	if !containsStr(sys, canary) {
+	if !strings.Contains(sys, canary) {
 		t.Error("InsertCanary did not embed the canary")
 	}
 	// The token must be recoverable from the prompt, since scanOutputLeak
@@ -169,13 +169,13 @@ func TestSecretScan_RedactionPreservesSurroundingText(t *testing.T) {
 	if got == nil {
 		t.Fatal("scanSecrets found nothing")
 	}
-	if containsStr(got.Evidence, awsKeyID) {
+	if strings.Contains(got.Evidence, awsKeyID) {
 		t.Error("redacted evidence still contains the raw secret")
 	}
-	if !containsStr(got.Evidence, "Here is the key") {
+	if !strings.Contains(got.Evidence, "Here is the key") {
 		t.Error("redacted evidence dropped the surrounding context")
 	}
-	if !containsStr(got.Evidence, "[REDACTED") {
+	if !strings.Contains(got.Evidence, "[REDACTED") {
 		t.Error("redacted evidence has no redaction marker")
 	}
 }
@@ -186,7 +186,7 @@ func TestSecretScan_NoRedactionKeepsValueForAudit(t *testing.T) {
 	if got == nil {
 		t.Fatal("scanSecrets found nothing")
 	}
-	if !containsStr(got.Evidence, awsKeyID) {
+	if !strings.Contains(got.Evidence, awsKeyID) {
 		t.Error("audit mode should retain the matched value in evidence")
 	}
 }
@@ -246,23 +246,9 @@ func TestPIIScan_Redaction(t *testing.T) {
 	if got == nil {
 		t.Fatal("scanPII found nothing")
 	}
-	if containsStr(got.Evidence, "bob@corp.com") {
+	if strings.Contains(got.Evidence, "bob@corp.com") {
 		t.Error("redacted PII evidence still contains the address")
 	}
-}
-
-func containsStr(haystack, needle string) bool {
-	return len(needle) > 0 && len(haystack) >= len(needle) &&
-		indexOf(haystack, needle) >= 0
-}
-
-func indexOf(haystack, needle string) int {
-	for i := 0; i+len(needle) <= len(haystack); i++ {
-		if haystack[i:i+len(needle)] == needle {
-			return i
-		}
-	}
-	return -1
 }
 
 func evidenceOf(f *Finding) string {

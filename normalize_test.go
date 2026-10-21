@@ -150,8 +150,11 @@ func TestNormalize_TruncatesOversizedInput(t *testing.T) {
 	if !res.Truncated {
 		t.Errorf("normalize(oversize).Truncated = false, want true")
 	}
-	if len(res.Raw) != 200 {
-		t.Errorf("normalize(oversize).Raw = %d bytes, want the full 200 preserved for callers", len(res.Raw))
+	// Raw must be the SCANNED prefix, not the full input: runPipeline
+	// hands it to L2, so keeping the full string there would let the
+	// regex layer work past the cap (audit finding F2).
+	if len(res.Raw) != 64 {
+		t.Errorf("normalize(oversize).Raw = %d bytes, want the 64-byte scanned prefix", len(res.Raw))
 	}
 }
 

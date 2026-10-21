@@ -158,10 +158,10 @@ func TestScanOutput_RedactionKeepsSecretsOutOfResult(t *testing.T) {
 		t.Fatalf("ScanOutput: %v", err)
 	}
 
-	if !containsStr(audit.Findings[0].Evidence, key) {
+	if !strings.Contains(audit.Findings[0].Evidence, key) {
 		t.Error("audit mode should retain the value")
 	}
-	if containsStr(safe.Findings[0].Evidence, key) {
+	if strings.Contains(safe.Findings[0].Evidence, key) {
 		t.Error("redacted result still contains the secret")
 	}
 }

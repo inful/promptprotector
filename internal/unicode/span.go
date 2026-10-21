@@ -13,23 +13,3 @@ type Anomaly struct {
 	Category string
 	Spans    []Span
 }
-
-// HasCategory reports whether an anomaly slice contains the named category.
-func HasCategory(anomalies []Anomaly, category string) bool {
-	for _, a := range anomalies {
-		if a.Category == category {
-			return true
-		}
-	}
-	return false
-}
-
-// SpansFor returns the spans for a single category (nil if absent).
-func SpansFor(anomalies []Anomaly, category string) []Span {
-	for _, a := range anomalies {
-		if a.Category == category {
-			return a.Spans
-		}
-	}
-	return nil
-}

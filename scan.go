@@ -128,56 +128,40 @@ func (d *Detector) ScanOutput(ctx context.Context, system, output string) (Resul
 		return res, err
 	}
 
-	// Output findings are added AFTER the input fusion: a leaked canary
-	// or an exposed API key is a confirmed incident, not a probabilistic
-	// risk score, so it must not be diluted by re-running the fusion
-	// formula over a mix of weak and strong signals.
-	var findings []Finding
 	if f := scanOutputLeak(system, output); f != nil {
-		findings = append(findings, *f)
+		res.Findings = append(res.Findings, *f)
 	}
 	if f := scanSecrets(output, d.cfg.redactOutput); f != nil {
-		findings = append(findings, *f)
+		res.Findings = append(res.Findings, *f)
 	}
 	if f := scanPII(output); f != nil {
-		findings = append(findings, *f)
+		res.Findings = append(res.Findings, *f)
 	}
 
-	res.Findings = append(res.Findings, findings...)
-	res.PipelineTrace = append(res.PipelineTrace, layerOutput)
-
-	// Re-fuse the output findings on their own rather than mixing them
-	// with the input findings: a leaked canary or exposed credential is a
-	// confirmed incident, and averaging it against weak input signals
-	// would understate it.
-	outScore, outDecision := fuse(findings, d.cfg)
-	res.Score, res.Decision = outScore, outDecision
+	// Re-fuse over the COMBINED findings. Fusing only the output findings
+	// (as this previously did) discarded the input verdict entirely, so a
+	// response containing a prompt injection but no leaked secret came
+	// back Allow.
+	//
+	// Combining is also what keeps a confirmed incident from being
+	// diluted: a leaked canary scores 0.95, and the corroboration term
+	// adds on top of it rather than averaging it away.
+	res.Score, res.Decision = fuse(res.Findings, d.cfg)
+	res.PipelineTrace = traceOf(res.Findings)
 	return res, nil
 }
 
-// run applies the input pipeline with optional context cancellation.
+// run applies the input pipeline, honouring context cancellation.
+//
+// The pipeline is deliberately synchronous. An earlier version ran it in
+// a goroutine and returned on ctx.Done(), which looked like a timeout but
+// was not one: the abandoned goroutine kept scanning to completion, so
+// WithTimeout cost a leaked goroutine and unbounded background CPU per
+// call without ever stopping the work. Real bounding comes from
+// WithMaxInputBytes, which is enforced where the input is truncated.
 func (d *Detector) run(ctx context.Context, text string, rs Ruleset) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}
-	if d.cfg.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, d.cfg.timeout)
-		defer cancel()
-	}
-
-	type outcome struct {
-		res Result
-	}
-	done := make(chan outcome, 1)
-	go func() {
-		done <- outcome{res: runPipeline(text, d.cfg, rs)}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return Result{}, ctx.Err()
-	case o := <-done:
-		return o.res, nil
-	}
+	return runPipeline(text, d.cfg, rs), nil
 }

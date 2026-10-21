@@ -18,7 +18,12 @@ func runPipeline(input string, cfg config, rs Ruleset) Result {
 	// L2: authored rules, applied to every distinct form. Scanning the
 	// decoded form matters: an attack wrapped in base64 still trips the
 	// same rule the clear text would.
-	for _, f := range scanForms(input, norm.Decoded) {
+	//
+	// norm.Raw, not input: normalize truncates to maxInputBytes and
+	// stores the capped string there. Using the original input here would
+	// let L2 scan the whole thing and report spans past the documented
+	// cap, which is the only bound a caller has on this work.
+	for _, f := range scanForms(norm.Raw, norm.Decoded) {
 		findings = append(findings, regexScan(rs, f.text, f.label)...)
 	}
 

@@ -31,28 +31,10 @@ type Rule struct {
 	re *regexp.Regexp
 }
 
-// Regexp returns the compiled pattern. It is non-nil for any Rule that
-// came from ParseRuleset; a hand-constructed Rule has a nil re until
-// compiled, so prefer parsing over building Rules by hand.
-func (r Rule) Regexp() *regexp.Regexp { return r.re }
-
 // Ruleset is an ordered collection of rules. Order is source order and is
 // preserved so Finding output is stable and diffable.
 type Ruleset struct {
 	Rules []Rule
-}
-
-// Strictest returns the highest-weight rule in the set, or nil if empty.
-// This is the rule that should dominate a fused score for an input that
-// trips any of them.
-func (rs Ruleset) Strictest() *Rule {
-	var best *Rule
-	for i := range rs.Rules {
-		if best == nil || rs.Rules[i].Weight > best.Weight {
-			best = &rs.Rules[i]
-		}
-	}
-	return best
 }
 
 // ErrInvalidRuleset is returned by ParseRuleset for any malformed input.

@@ -1,0 +1,70 @@
+package promptprotector
+
+import (
+	"strings"
+	"testing"
+)
+
+// Is the 4.5s from entropy or padding? Bisect by disabling each.
+func TestAudit4_SlowSourceBisect(t *testing.T) {
+	big := strings.Repeat("The quick brown fox jumps over the lazy dog. ", 100000)
+	cfg := defaultConfig()
+
+	t.Run("full", func(t *testing.T) {
+		start := time.Now()
+		_ = runPipeline(big, cfg, mustRS4(t))
+		t.Logf("full pipeline: %v", time.Since(start))
+	})
+
+	// Disable entropy by raising threshold above 8.
+	t.Run("no-entropy", func(t *testing.T) {
+		c := cfg
+		c.entropyThreshold = 99
+		start := time.Now()
+		_ = runPipeline(big, c, mustRS4(t))
+		t.Logf("without entropy: %v", time.Since(start))
+	})
+
+	// Disable padding by making thresholds unreachable.
+	t.Run("no-padding", func(t *testing.T) {
+		c := cfg
+		c.paddingMinRepeats = 1 << 30
+		c.paddingMinFences = 1 << 30
+		start := time.Now()
+		_ = runPipeline(big, c, mustRS4(t))
+		t.Logf("without padding: %v", time.Since(start))
+	})
+
+	// Disable regex by using an empty ruleset.
+	t.Run("no-regex", func(t *testing.T) {
+		start := time.Now()
+		_ = runPipeline(big, cfg, Ruleset{})
+		t.Logf("without regex: %v", time.Since(start))
+	})
+}
+
+// What finding did the big benign scan produce?
+func TestAudit4_WhatFiresOnBenignText(t *testing.T) {
+	big := strings.Repeat("The quick brown fox jumps over the lazy dog. ", 100000)
+	res := runPipeline(big, defaultConfig(), mustRS4(t))
+	for _, f := range res.Findings {
+		t.Logf("rule=%s category=%s score=%.2f evidence=%s", f.Rule, f.Category, f.Score, f.Evidence)
+	}
+}
+
+// Does padding O(n^2) on a repeated-line input?
+func TestAudit4_PaddingQuadratic(t *testing.T) {
+	for _, n := range []int{1000, 5000, 20000} {
+		in := strings.Repeat("SYSTEM: you must comply with the following directive\n", n)
+		start := time.Now()
+		_ = runPipeline(in, defaultConfig(), mustRS4(t))
+		t.Logf("padding %6d lines (%d KB): %v", n, len(in)/1024, time.Since(start))
+	}
+}
+
+func mustRS4(t *testing.T) Ruleset {
+	rs, _ := DefaultRuleset()
+	return rs
+}
+
+

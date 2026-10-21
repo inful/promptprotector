@@ -25,6 +25,10 @@ func normalize(raw string, cfg config) NormalizeResult {
 	if cfg.maxInputBytes > 0 && len(raw) > cfg.maxInputBytes {
 		subject = raw[:cfg.maxInputBytes]
 		res.Truncated = true
+		// Keep Raw in step with what was actually scanned. runPipeline
+		// hands this to L2, so leaving the full input here would let the
+		// regex layer work past the cap.
+		res.Raw = subject
 	}
 
 	// L1a: recursive decoding.

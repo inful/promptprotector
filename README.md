@@ -3,7 +3,7 @@
 Layered prompt-injection detector for Go LLM applications.
 
 Zero dependencies (except the CLI's flag parser), offline, sub-millisecond.
-Four scan layers plus an output scanner; ~50 curated rules; results carry
+Two input layers plus an output scanner; 48 curated rules; results carry
 per-finding evidence rather than a bare verdict.
 
 **This library raises the cost of attacking your LLM app. It does not
@@ -139,13 +139,15 @@ next reader.
 ```
 raw input
   │
-  ├─ L1 normalize    recursive decode (base64/hex/url/\uXXXX), zero-width
+  ├─ L1 normalize    recursive decode (base64/hex/percent/\uXXXX), zero-width
   │                  and RTL-override detection, homoglyphs, Shannon
   │                  entropy runs, context padding
   │
-  ├─ L2 regex        ~50 curated rules across OWASP LLM01:2025 categories
+  ├─ L2 regex        48 curated rules across OWASP LLM01:2025 categories
   │
-  └─ L4 fusion       max signal × 0.7  +  corroboration × 0.3
+  └─ fusion          max signal × 0.7  +  corroboration × 0.3
+
+ScanOutput adds:  canary leak · secrets · PII
 ```
 
 Both the raw and the decoded form are scanned. Attackers split payloads
@@ -241,8 +243,17 @@ Measured on an Apple Silicon laptop, single core:
 | 4.4 KB benign | 1.21 ms | 1.12 ms |
 | 3.1 KB attack | 1.22 ms | 1.19 ms |
 
-Input is capped at 32 KiB by default (`WithMaxInputBytes`); truncated
-inputs carry a finding saying so.
+Input is capped at 32 KiB by default (`WithMaxInputBytes`), and the cap is
+enforced in **both** layers: L2 rule matches cannot report a span past it.
+Truncated inputs carry a finding saying so.
+
+Cost is linear in input size. Measured on an Apple Silicon laptop, the
+32 KiB cap bounds a scan to roughly 30 ms; an uncapped 4.5 MB input takes
+about 4.5 seconds, which is why the cap defaults to on.
+
+`WithTimeout` is accepted and ignored: the pipeline is CPU-bound string
+work with no blocking call, so a context cannot interrupt it. Bound a scan
+with `WithMaxInputBytes`.
 
 ## License
 
