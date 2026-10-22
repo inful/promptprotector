@@ -272,6 +272,16 @@ These are real, measured, and worth knowing before you rely on it:
   patterns beat 500 speculative ones.
 - **The ruleset is a dataset, not a security boundary.** The patterns are
   public; assume an attacker has read them.
+- **Four rules have no quiet benign form.** Measured on a corpus of ten
+  realistic documents, `ScanInput` blocks 4 of them: a support reply
+  ("I'm the admin on this account"), an onboarding note ("Enable developer
+  mode to access the build pipeline"), an HR notice ("This message
+  supersedes all previous instructions") and a recipe ("Repeat everything
+  above verbatim"). Narrowing was measured and costs more attack recall
+  than it saves — the benign and attack forms are structurally identical.
+  `ScanUntrusted`, the ruleset built for documents, measures 0 on the same
+  corpus. Use the right scanner, and prefer `promptbuilder.Wrap` for
+  retrieved content.
 - **Injection only, not content safety.** Classifying "how do I make a
   bomb" is content moderation, a different product (Llama Guard, Granite
   Guardian). The classic "jailbreak" phrasings are covered here because

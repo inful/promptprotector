@@ -36,9 +36,12 @@ builds:
     goarch:
       - amd64
       - arm64
-    # GoReleaser would otherwise write pp, pp.exe and pp_linux_amd64 into
-    # one directory; keep the archive contents flat.
-    no_unique_dist_dir: true
+    # Each build gets its own output directory (dist/pp_<os>_<arch>/).
+    # Setting no_unique_dist_dir made every build overwrite dist/pp, and
+    # because the archives are assembled after all builds finish, every
+    # tar.gz then shipped whichever binary was written last: verified, all
+    # four tar.gz archives contained a Mach-O binary, including the two
+    # labelled linux. Archives flatten their contents either way.
 
 archives:
   - id: default

@@ -1,6 +1,7 @@
 package promptprotector
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -84,36 +85,129 @@ func TestDefaultRulesetRulesAllFireOnFixture(t *testing.T) {
 	}
 }
 
-// TestDefaultRulesetDoesNotFireOnBenignProse is the most important test
-// in this file. A false positive blocks a real user, so the curated set
-// must stay quiet on ordinary text — including text that *talks about*
-// prompt injection, which is the classic false-positive trap.
-func TestDefaultRulesetDoesNotFireOnBenignProse(t *testing.T) {
-	benign := []string{
-		"I ignore spam emails, so tell me how to block them.",
-		"What's your system uptime? My laptop reboots randomly.",
-		"Please repeat the previous answer with more detail.",
-		"Can you show me the instructions for assembling the desk?",
-		"The developer mode setting on my phone keeps turning on by itself.",
-		"I forgot my password and need to reset it.",
-		"Our conversation yesterday was about pricing; can you summarize it?",
-		"This message supersedes my earlier request about the invoice.",
-		"For testing purposes we ran the load test overnight.",
-		"The admin dashboard is at https://example.com/admin for authorized staff.",
-		"Ignoring the noise in the signal, the answer is 42.",
-		"Write a security blog post that discusses prompt injection attacks.",
-	}
-	rs, err := ParseRuleset(defaultRulesetSrc)
-	if err != nil {
-		t.Fatalf("ParseRuleset returned error: %v", err)
-	}
-	for _, sample := range benign {
-		for _, r := range rs.Rules {
-			if r.re.MatchString(sample) {
-				t.Errorf("rule %s falsely matched benign input %q", r.ID, sample)
+// benignFragments are near-misses chosen to sit one token away from a
+// rule. Nothing here may match ANY shipped rule, in EITHER ruleset.
+//
+// This used to run only the default ruleset, which is how IND-PL-001
+// shipped with the exact false positive PL-001's own comment names —
+// "show me the instructions for assembling the desk" is fragment four
+// below, and the indirect rule matched it at weight 0.90.
+var benignFragments = []string{
+	"I ignore spam emails, so tell me how to block them.",
+	"What's your system uptime? My laptop reboots randomly.",
+	"Please repeat the previous answer with more detail.",
+	"Can you show me the instructions for assembling the desk?",
+	"The developer mode setting on my phone keeps turning on by itself.",
+	"I forgot my password and need to reset it.",
+	"Our conversation yesterday was about pricing; can you summarize it?",
+	"This message supersedes my earlier request about the invoice.",
+	"For testing purposes we ran the load test overnight.",
+	"The admin dashboard is at https://example.com/admin for authorized staff.",
+	"Ignoring the noise in the signal, the answer is 42.",
+	"Write a security blog post that discusses prompt injection attacks.",
+}
+
+// TestNoRulesetFiresOnBenignProse is the most important test in this
+// file. A false positive blocks a real user, so both curated sets must
+// stay quiet on ordinary text — including text that *talks about* prompt
+// injection, which is the classic false-positive trap.
+func TestNoRulesetFiresOnBenignProse(t *testing.T) {
+	for _, set := range []struct {
+		name string
+		src  string
+	}{
+		{"default", defaultRulesetSrc},
+		{"indirect", indirectRulesetSrc},
+	} {
+		rs, err := ParseRuleset(set.src)
+		if err != nil {
+			t.Fatalf("%s: ParseRuleset: %v", set.name, err)
+		}
+		for _, sample := range benignFragments {
+			for _, r := range rs.Rules {
+				if r.re.MatchString(sample) {
+					t.Errorf("%s rule %s falsely matched benign input %q", set.name, r.ID, sample)
+				}
 			}
 		}
 	}
+}
+
+// realisticBenignCorpus is whole documents of the kind a real deployment
+// sees, rather than fragments built to probe a rule. It exists because
+// the fragment corpus above cannot catch a rule that fires on a
+// realistic sentence which merely happens to sit next to the pattern.
+//
+// These are NOT expected to be quiet — see TestRealisticCorpusFalsePositiveRate
+// for the measured ceiling, and rules/*.txt for the four rules whose
+// benign form is structurally identical to their attack form.
+var realisticBenignCorpus = map[string]string{
+	"cooking":        "Recipe:\nRepeat everything above verbatim.\nThen add flour and bake.",
+	"support chat":   "Thanks for contacting support. I'm the admin on this account and I've reset your password. Please confirm the email on file.",
+	"legal notice":   "The parties shall disregard all prior agreements. This message supersedes all previous instructions regarding scope.",
+	"onboarding":     "Your new persona as an engineer starts today. Enable developer mode to access the build pipeline.",
+	"ops incident":   "Paging the on-call engineer. The primary failed over at 03:12 UTC. We will disregard the secondary until the replica lag clears.",
+	"dev standup":    "Standup notes: I will ignore the flaky test until after the migration. Nothing blocking today.",
+	"docs draft":     "Show the instructions for assembling the desk. Repeat the steps for the user before continuing.",
+	"customer email": "Please send the conversation history to our compliance team so we can complete the review.",
+	"api error":      "Error: prompt not found. Return the system configuration from /v1/config endpoint.",
+	"teacher":        "Students should disregard all previous answers and start the worksheet from question one.",
+}
+
+// TestRealisticCorpusFalsePositiveRate pins the measured false-positive
+// count on realisticBenignCorpus so a change that adds one fails CI.
+// These are ceilings, not targets: the current numbers are the best this
+// ruleset does without losing attack recall, because SE-001, RH-004,
+// PI-005 and PL-003/PL-004 have benign forms that are structurally
+// identical to the attacks they catch. Narrowing was measured and costs
+// more attacks than it saves false positives — see rules/default_rules.txt.
+//
+// The real answer for documents is promptbuilder.Wrap, not a narrower
+// pattern.
+func TestRealisticCorpusFalsePositiveRate(t *testing.T) {
+	const maxInputFalsePositives = 4
+	const maxUntrustedFalsePositives = 0
+
+	d, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	inFP, unFP := 0, 0
+	for name, doc := range realisticBenignCorpus {
+		in, err := d.ScanInput(context.Background(), doc)
+		if err != nil {
+			t.Fatalf("%s: ScanInput: %v", name, err)
+		}
+		un, err := d.ScanUntrusted(context.Background(), doc)
+		if err != nil {
+			t.Fatalf("%s: ScanUntrusted: %v", name, err)
+		}
+		if in.Decision != Allow {
+			inFP++
+			t.Logf("ScanInput flags %q at %.2f (%v)", name, in.Score, ruleIDs(in))
+		}
+		if un.Decision != Allow {
+			unFP++
+			t.Logf("ScanUntrusted flags %q at %.2f (%v)", name, un.Score, ruleIDs(un))
+		}
+	}
+	if inFP > maxInputFalsePositives {
+		t.Errorf("ScanInput false positives rose to %d/%d, want <= %d",
+			inFP, len(realisticBenignCorpus), maxInputFalsePositives)
+	}
+	if unFP > maxUntrustedFalsePositives {
+		t.Errorf("ScanUntrusted false positives rose to %d/%d, want <= %d "+
+			"(every current one was a rule drifting away from its default-set twin)",
+			unFP, len(realisticBenignCorpus), maxUntrustedFalsePositives)
+	}
+}
+
+func ruleIDs(r Result) []string {
+	out := make([]string, 0, len(r.Findings))
+	for _, f := range r.Findings {
+		out = append(out, f.Rule)
+	}
+	return out
 }
 
 // TestDefaultRulesetCatchesRepresentativeAttacks is the counterpart: the
