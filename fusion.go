@@ -29,25 +29,27 @@ func runPipeline(input string, cfg config, rs Ruleset) Result {
 	// stores the capped string there. Using the original input here would
 	// let L2 scan the whole thing and report spans past the documented
 	// cap, which is the only bound a caller has on this work.
-	// De-duplication applies only between the raw form and its de-fanged
-	// rendering, which are two views of the same text: a rule both match
-	// is reported once, keeping the raw finding's usable span. Every
-	// other form is different material, and its Evidence is often the
-	// only place the payload's content is named at all — collapsing a
-	// decoded finding into a raw one lets a clear-text decoy hide what
-	// the payload actually said.
-	var rawRules map[string]bool
+	// De-duplication applies within a form PAIR — raw with its
+	// de-fanged rendering, decoded with its de-fanged rendering. Both
+	// members are two views of one text, so a rule that matches both is
+	// reported once, keeping the first finding's usable span. The pairs
+	// are independent, and every pair is different material from every
+	// other: collapsing across pairs lets a clear-text decoy hide what a
+	// decoded payload actually said, which is the one thing its Evidence
+	// exists to record.
+	pairs := map[string]map[string]bool{}
 	for _, f := range scanForms(norm.Raw, norm.Decoded, norm.Defanged, norm.DecodedDefanged) {
 		hits := regexScan(rs, f.text, f.label)
-		if f.label == formRaw {
-			rawRules = make(map[string]bool, len(hits))
-			for _, h := range hits {
-				rawRules[h.Rule] = true
-			}
-		}
+		sibling, isDeFanged := formSibling(f.label)
 		for _, hit := range hits {
-			if f.label == formDefanged && rawRules[hit.Rule] {
+			if isDeFanged && pairs[sibling][hit.Rule] {
 				continue
+			}
+			if !isDeFanged {
+				if pairs[sibling] == nil {
+					pairs[sibling] = make(map[string]bool, len(hits))
+				}
+				pairs[sibling][hit.Rule] = true
 			}
 			findings = append(findings, hit)
 		}

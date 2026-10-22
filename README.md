@@ -14,8 +14,32 @@ al. 2025](https://aclanthology.org/2025.llmsec-1.8/)). See
 
 ## Install
 
+As a library:
+
 ```bash
 go get github.com/inful/promptprotector
+```
+
+Or the `pp` CLI, from a release archive (linux, darwin or windows, on
+amd64 or arm64 — every archive ships a `checksums.txt`):
+
+```bash
+# macOS / Linux
+tar xzf pp_<version>_<os>_<arch>.tar.gz
+sudo install -m 0755 pp /usr/local/bin/pp
+```
+
+```bash
+go install github.com/inful/promptprotector/cmd/pp@latest   # or from source
+```
+
+Note the name: `pp` also means the Unix pipe formatter, whose binary lives
+at `/usr/bin/pp`. Installing this one to `/usr/local/bin/pp` shadows it,
+because `/usr/local/bin` comes first on `PATH`. If you need both, rename
+the extracted binary:
+
+```bash
+sudo install -m 0755 pp /usr/local/bin/promptprotector-pp
 ```
 
 ## Library usage
@@ -113,7 +137,7 @@ Options: `WithRules`, `WithIndirectRules`, `WithThresholds`,
 ## CLI usage
 
 ```bash
-go install github.com/inful/promptprotector/cmd/pp@latest
+pp scan --mode input document.txt
 ```
 
 ```bash
@@ -284,8 +308,10 @@ enforced in **both** layers: L2 rule matches cannot report a span past it.
 Truncated inputs carry a finding saying so.
 
 Cost is linear in input size. Measured on an Apple Silicon laptop, the
-32 KiB cap bounds a scan to about 39 ms; an uncapped 4.6 MB input takes
-about 5.3 seconds, which is why the cap defaults to on.
+32 KiB cap bounds a scan of ordinary text to about 38 ms; an input
+crafted so that every scanned form matches reaches about 57 ms and 40
+findings. An uncapped 4.6 MB input takes about 5.3 seconds, which is why
+the cap defaults to on.
 
 The cap covers the scanned **text**, not the system prompt: `--system` and
 `ScanOutput`'s `system` argument are read whole, and the canary search

@@ -1,0 +1,102 @@
+# goreleaser configuration for github.com/inful/promptprotector.
+#
+# This repo ships BOTH a library and the `pp` CLI, so unlike the sibling
+# ../decide (library only, builds skipped) this one produces binaries for
+# every platform CI already cross-compiles — the same six GOOS/GOARCH
+# pairs, so a release can never ship a platform the matrix missed.
+#
+# Draft by default so the maintainer can read the notes before publishing.
+# Docs: https://goreleaser.com/customization/
+version: 2
+
+project_name: pp
+
+before:
+  hooks:
+    # Same suite CI runs, so a regression is caught at tag time rather
+    # than by a user downloading the artefact.
+    - go mod tidy
+    - go test -race -count=1 ./...
+
+builds:
+  - id: pp
+    main: ./cmd/pp
+    binary: pp
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      # cli.go declares `var version = "dev"` and overrides it here.
+      - -s -w -X main.version={{.Version}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    # GoReleaser would otherwise write pp, pp.exe and pp_linux_amd64 into
+    # one directory; keep the archive contents flat.
+    no_unique_dist_dir: true
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    # LICENSE and README travel with every artefact: this is GPL-3.0, and
+    # the licence text must accompany the binary.
+    files:
+      - LICENSE
+      - README.md
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - '^ci:'
+      - '^build:'
+      - '^style:'
+  groups:
+    - title: Features
+      regexp: '^feat'
+      order: 0
+    - title: 'Bug Fixes'
+      regexp: '^fix'
+      order: 1
+    - title: 'Performance Improvements'
+      regexp: '^perf'
+      order: 2
+    - title: 'Code Refactoring'
+      regexp: '^refactor'
+      order: 3
+    - title: Others
+      order: 999
+
+release:
+  github:
+    owner: inful
+    name: promptprotector
+  draft: true
+  prerelease: auto
+
+# `brew install` and `apt` are deliberately NOT configured here. The
+# binary is named `pp`, which collides with /usr/bin/pp (the pipe
+# formatter), so any formula has to install it under a different name
+# (promptprotector-pp). That is a one-line block to add once a tap
+# actually exists; shipping it now would fail the release against a
+# repository that may not.

@@ -118,6 +118,21 @@ func normalize(raw string, cfg config, rs Ruleset) NormalizeResult {
 	return res
 }
 
+// formSibling maps a de-fanged form label to the label it is a
+// rendering of, and reports whether the label is one. Keyed on the pair
+// rather than on one literal label, so adding a third pair cannot leave
+// it half-covered.
+func formSibling(label string) (sibling string, isDeFanged bool) {
+	switch label {
+	case formDefanged:
+		return formRaw, true
+	case formDecodedDefanged:
+		return formDecoded, true
+	default:
+		return label, false
+	}
+}
+
 // form is one text variant to scan, tagged so a Finding's Evidence can say
 // which variant produced it.
 type form struct {
@@ -195,6 +210,20 @@ const maxAdditionalEvidencePayload = 64
 //
 // unicode.Scan is called once; the anomalies are grouped by category
 // first so the summary can state the true overflow rather than the cap.
+// formSpan returns a Span usable against the caller's input, or nil for
+// every form that is not the raw one. The decoded and de-fanged forms are
+// rewritten strings, so their offsets index those strings: a zero-width
+// finding at payload offset 2 resolves to three bytes of base64 in the
+// input. Every decoder shrinks, so those offsets always land in range and
+// the value looks usable while being wrong — the worst combination.
+// Evidence names the matched region either way.
+func formSpan(label string, start, end int) *Span {
+	if label != formRaw {
+		return nil
+	}
+	return &Span{Start: start, End: end}
+}
+
 func unicodeFindings(label, text string) []Finding {
 	type group struct {
 		category Category
@@ -228,7 +257,7 @@ func unicodeFindings(label, text string) []Finding {
 				Rule:     g.detector,
 				Category: g.category,
 				Score:    l1BaseScores[g.category],
-				Span:     &Span{Start: sp.Start, End: sp.End},
+				Span:     formSpan(label, sp.Start, sp.End),
 				Evidence: fmt.Sprintf("%s: span [%d,%d)", label, sp.Start, sp.End),
 			})
 		}
@@ -257,7 +286,7 @@ func entropyFindings(cfg config, f form) []Finding {
 		Rule:     "high_entropy_run",
 		Category: CategoryHighEntropy,
 		Score:    l1BaseScores[CategoryHighEntropy],
-		Span:     &Span{Start: run.Start, End: run.End},
+		Span:     formSpan(f.label, run.Start, run.End),
 		Evidence: fmt.Sprintf("%s: %.2f bits/byte over %d bytes", f.label, run.Entropy, run.End-run.Start),
 	}}
 }
@@ -278,7 +307,7 @@ func paddingFindings(f form) []Finding {
 			Rule:     string(s.Kind),
 			Category: CategoryContextPadding,
 			Score:    l1BaseScores[CategoryContextPadding],
-			Span:     &Span{Start: s.Start, End: s.End},
+			Span:     formSpan(f.label, s.Start, s.End),
 			Evidence: fmt.Sprintf("%s: %s over %d lines", f.label, s.Detail, s.Lines),
 		})
 	}
