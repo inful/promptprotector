@@ -29,19 +29,26 @@ func runPipeline(input string, cfg config, rs Ruleset) Result {
 	// stores the capped string there. Using the original input here would
 	// let L2 scan the whole thing and report spans past the documented
 	// cap, which is the only bound a caller has on this work.
-	// L2 rule IDs are reported once. The forms overlap by design — the
-	// de-fanged copy of a phrase the raw form also matches would
-	// otherwise emit the same rule twice with different span
-	// semantics, which is exactly the "per-occurrence flood" triage
-	// does not want. The first form to match wins, so raw keeps its
-	// span and the rewritten forms only add rules raw could not see.
-	seenRules := make(map[string]bool, len(rs.Rules))
-	for _, f := range scanForms(norm.Raw, norm.Decoded, norm.Defanged) {
-		for _, hit := range regexScan(rs, f.text, f.label) {
-			if seenRules[hit.Rule] {
+	// De-duplication applies only between the raw form and its de-fanged
+	// rendering, which are two views of the same text: a rule both match
+	// is reported once, keeping the raw finding's usable span. Every
+	// other form is different material, and its Evidence is often the
+	// only place the payload's content is named at all — collapsing a
+	// decoded finding into a raw one lets a clear-text decoy hide what
+	// the payload actually said.
+	var rawRules map[string]bool
+	for _, f := range scanForms(norm.Raw, norm.Decoded, norm.Defanged, norm.DecodedDefanged) {
+		hits := regexScan(rs, f.text, f.label)
+		if f.label == formRaw {
+			rawRules = make(map[string]bool, len(hits))
+			for _, h := range hits {
+				rawRules[h.Rule] = true
+			}
+		}
+		for _, hit := range hits {
+			if f.label == formDefanged && rawRules[hit.Rule] {
 				continue
 			}
-			seenRules[hit.Rule] = true
 			findings = append(findings, hit)
 		}
 	}

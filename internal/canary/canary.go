@@ -6,7 +6,11 @@
 // too — a fix to one copy used to miss the other.
 package canary
 
-import "strings"
+import (
+	"cmp"
+	"slices"
+	"strings"
+)
 
 // DirectiveFmt is appended to a system prompt as the canary carrier.
 // The phrasing reads as a natural instruction and the token itself has
@@ -40,23 +44,33 @@ func IsHexDigit(b byte) bool {
 //
 // Source order, not prefix order: a prompt holding both a PTP- and a
 // PPB- token reports the one that appears first, so both packages agree
-// on which token a prompt leads with.
+// on which token a prompt leads with. Sorting uses the offsets the scan
+// already produced — an earlier version re-found each token with
+// strings.Index per comparison, which was quadratic and cost 418 ms on a
+// 4000-canary prompt.
 func ExtractAll(system string, prefixes ...string) []string {
-	var out []string
+	type hit struct {
+		at    int
+		token string
+	}
+	var hits []hit
+	seen := make(map[string]bool)
+
 	for _, prefix := range prefixes {
 		for i := 0; i <= len(system)-len(prefix); {
-			hit := strings.Index(system[i:], prefix)
-			if hit < 0 {
+			found := strings.Index(system[i:], prefix)
+			if found < 0 {
 				break
 			}
-			pos := i + hit
+			pos := i + found
 			end := 0
 			for rest := system[pos+len(prefix):]; end < len(rest) && IsHexDigit(rest[end]); end++ {
 			}
 			if end >= MinHexLen {
-				canary := system[pos : pos+len(prefix)+end]
-				if !contains(out, canary) {
-					out = append(out, canary)
+				token := system[pos : pos+len(prefix)+end]
+				if !seen[token] {
+					seen[token] = true
+					hits = append(hits, hit{at: pos, token: token})
 				}
 			}
 			// Resume past this occurrence so the scan stays linear in
@@ -64,27 +78,11 @@ func ExtractAll(system string, prefixes ...string) []string {
 			i = pos + len(prefix) + end
 		}
 	}
-	return inSourceOrder(out, system)
-}
 
-// inSourceOrder sorts the collected tokens by where they first appear,
-// undoing the per-prefix grouping so a prompt with both namespaces
-// reports the earlier one first.
-func inSourceOrder(tokens []string, system string) []string {
-	out := append([]string(nil), tokens...)
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0 && strings.Index(system, out[j]) < strings.Index(system, out[j-1]); j-- {
-			out[j], out[j-1] = out[j-1], out[j]
-		}
+	slices.SortFunc(hits, func(a, b hit) int { return cmp.Compare(a.at, b.at) })
+	out := make([]string, len(hits))
+	for i, h := range hits {
+		out[i] = h.token
 	}
 	return out
-}
-
-func contains(hay []string, needle string) bool {
-	for _, h := range hay {
-		if h == needle {
-			return true
-		}
-	}
-	return false
 }

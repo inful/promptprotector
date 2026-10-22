@@ -153,6 +153,10 @@ func ScanUntrusted(ctx context.Context, text string) (Result, error) {
 // Pass an empty system to skip the canary check, or a system that has not
 // had InsertCanary applied — in which case the check is inert. Enable
 // WithRedaction to keep matched values out of the Result.
+//
+// Unlike output, system is never truncated by WithMaxInputBytes: the
+// canary search reads it whole, and its cost scales with the number of
+// canary tokens present. See maxFuzzyCanaries in output.go.
 func ScanOutput(ctx context.Context, system, output string) (Result, error) {
 	return defaultDetector.ScanOutput(ctx, system, output)
 }

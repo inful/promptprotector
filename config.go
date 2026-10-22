@@ -81,11 +81,13 @@ type NormalizeResult struct {
 	Decoded string
 	// Defanged is Raw with zero-width and bidi controls removed and
 	// homoglyphs folded to Latin. It equals Raw when the input carried no
-	// such characters, which is the normal case.
-	Defanged  string
-	Chain     []string
-	Findings  []Finding
-	Truncated bool
+	// such characters, which is the normal case. DecodedDefanged is the
+	// same treatment applied to Decoded.
+	Defanged        string
+	DecodedDefanged string
+	Chain           []string
+	Findings        []Finding
+	Truncated       bool
 }
 
 // l1BaseScores are the per-category confidence values for structural

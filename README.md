@@ -284,8 +284,15 @@ enforced in **both** layers: L2 rule matches cannot report a span past it.
 Truncated inputs carry a finding saying so.
 
 Cost is linear in input size. Measured on an Apple Silicon laptop, the
-32 KiB cap bounds a scan to roughly 30 ms; an uncapped 4.5 MB input takes
-about 4.5 seconds, which is why the cap defaults to on.
+32 KiB cap bounds a scan to about 39 ms; an uncapped 4.6 MB input takes
+about 5.3 seconds, which is why the cap defaults to on.
+
+The cap covers the scanned **text**, not the system prompt: `--system` and
+`ScanOutput`'s `system` argument are read whole, and the canary search
+scales with how many canary tokens they contain. Extraction is linear
+(4000 canaries: 1 ms) and verbatim matching is linear too (1.8 ms), but
+the tolerant near-miss match runs for at most the first 32 canaries —
+a real system prompt has one or two.
 
 `WithTimeout` is accepted and ignored: the pipeline is CPU-bound string
 work with no blocking call, so a context cannot interrupt it. Bound a scan

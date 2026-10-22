@@ -82,6 +82,10 @@ func WithEntropyThreshold(bits float64) Option {
 // response, set the cap above the largest expected output length, or
 // call WithMaxInputBytes(0) to disable the cap entirely.
 //
+// The cap bounds the scanned text only. The system prompt passed to
+// ScanOutput is never truncated, and the canary search over it scales
+// with the number of canary tokens it contains — see ScanOutput.
+//
 // Cost: the scan is O(cap). Measured on a 2026-class CPU: 32 KiB benign
 // input scans in ~50 ms; with the cap disabled, 2 MiB takes ~2.7 s.
 // Anything called in the request path should keep the cap, with the

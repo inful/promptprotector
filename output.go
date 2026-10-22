@@ -66,11 +66,13 @@ func scanOutputLeak(system, output string, redact bool) *Finding {
 	if system == "" || output == "" {
 		return nil
 	}
-	for _, canary := range extractCanaries(system) {
-		if i := strings.Index(output, canary); i >= 0 {
-			return canaryFinding(canaryEvidence(canary, i, redact, false), false)
+	canaries := extractCanaries(system)
+	for i, canary := range canaries {
+		if at := strings.Index(output, canary); at >= 0 {
+			return canaryFinding(canaryEvidence(canary, at, redact, false), false)
 		}
-		if len(output) <= fuzzyMatchCeiling && fuzzyContains(output, canary, leakTolerance) {
+		if i < maxFuzzyCanaries && len(output) <= fuzzyMatchCeiling &&
+			fuzzyContains(output, canary, leakTolerance) {
 			return canaryFinding(canaryEvidence(canary, -1, redact, true), true)
 		}
 	}
@@ -133,6 +135,18 @@ func canaryFinding(evidence string, fuzzy bool) *Finding {
 // ceiling we fall back to exact-only, which still catches the
 // security-relevant case: a verbatim leak.
 const fuzzyMatchCeiling = 64 << 10
+
+// maxFuzzyCanaries bounds how many of a system's canaries get the
+// fuzzy fallback. Measured on a 4000-canary prompt against 27 KB of
+// output: exact matching cost 1.8 ms for all 4000, fuzzy matching cost
+// 627 ms. The exact check is the one that matters — it catches the
+// verbatim leak — so only the tolerant match is capped, at the first
+// maxFuzzyCanaries canaries in source order.
+//
+// Limit: a prompt carrying more canaries than this keeps exact coverage
+// for all of them but only fuzzy coverage for the first
+// maxFuzzyCanaries. A real system prompt has one or two.
+const maxFuzzyCanaries = 32
 
 // fuzzyContains reports whether needle appears in haystack within
 // maxDist edits. Windows of len(needle)-maxDist .. len(needle)+maxDist

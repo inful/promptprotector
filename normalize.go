@@ -82,9 +82,13 @@ func normalize(raw string, cfg config, rs Ruleset) NormalizeResult {
 			})
 			// L2 regex on the additional decoded payload, so a long benign
 			// base64 run cannot hide a sibling attack encoded later in
-			// the same input. regexScan drops the span for this form
-			// because its offsets index the payload, not the input.
-			res.Findings = append(res.Findings, regexScan(rs, payload, formDecodedSubst)...)
+			// the same input. Stripped first: the payload can carry the
+			// same invisible characters as the raw text, and a rule that
+			// matches literal ASCII cannot see through them. regexScan
+			// drops the span for this form because its offsets index the
+			// payload, not the input.
+			res.Findings = append(res.Findings,
+				regexScan(rs, unicode.Strip(payload), formDecodedSubst)...)
 		}
 	}
 
@@ -92,8 +96,9 @@ func normalize(raw string, cfg config, rs Ruleset) NormalizeResult {
 	// NOT included — these sub-scans look for the very characters Strip
 	// removes, so it could only ever repeat what the raw scan found.
 	res.Defanged = unicode.Strip(subject)
+	res.DecodedDefanged = unicode.Strip(res.Decoded)
 
-	for _, form := range scanForms(subject, res.Decoded, "") {
+	for _, form := range scanForms(subject, res.Decoded, "", "") {
 		res.Findings = append(res.Findings, unicodeFindings(form.label, form.text)...)
 		res.Findings = append(res.Findings, entropyFindings(cfg, form)...)
 		res.Findings = append(res.Findings, paddingFindings(form)...)
@@ -123,28 +128,36 @@ type form struct {
 // Form labels. Only formRaw's findings carry a Span usable against the
 // caller's input; see regexScan.
 const (
-	formRaw          = "raw"
-	formDecoded      = "decoded"
-	formDefanged     = "defanged"
-	formDecodedSubst = "decoded-substr"
+	formRaw             = "raw"
+	formDecoded         = "decoded"
+	formDefanged        = "defanged"
+	formDecodedDefanged = "decoded-defanged"
+	formDecodedSubst    = "decoded-substr"
 )
 
 // scanForms returns the distinct forms worth scanning: always the raw
-// input, plus the decoded form when decoding actually changed something.
-// When they are identical we scan once, so a clean input never produces
-// duplicate findings.
+// input, each decoded form, and a de-fanged rendering of both.
 //
-// defanged is passed as "" by the L1 sub-scans — they are looking for the
-// very characters Strip removes, so scanning the stripped form would only
-// ever find what the raw scan already found. It exists for L2, whose rules
+// Every form is de-fanged, not just the raw one. Stripping only the raw
+// input meant base64(obfuscated attack) carried its invisible characters
+// all the way to L2, so a one-line encoding step took the verdict from
+// Block to Warn. Strip is the identity on text with nothing to remove,
+// so a clean form costs one map pass and adds no finding.
+//
+// The L1 sub-scans pass "" for both de-fanged forms: they look for the
+// very characters Strip removes, so scanning the stripped form could only
+// repeat what the raw scan already found. They exist for L2, whose rules
 // match literal ASCII and cannot see through the obfuscation.
-func scanForms(raw, decoded, defanged string) []form {
+func scanForms(raw, decoded, defanged, decodedDefanged string) []form {
 	forms := []form{{label: formRaw, text: raw}}
-	if decoded != "" && decoded != raw {
-		forms = append(forms, form{label: formDecoded, text: decoded})
-	}
 	if defanged != "" && defanged != raw {
 		forms = append(forms, form{label: formDefanged, text: defanged})
+	}
+	if decoded != "" && decoded != raw {
+		forms = append(forms, form{label: formDecoded, text: decoded})
+		if decodedDefanged != "" && decodedDefanged != decoded {
+			forms = append(forms, form{label: formDecodedDefanged, text: decodedDefanged})
+		}
 	}
 	return forms
 }
