@@ -18,7 +18,14 @@ import (
 // defeat single-pass checks, so a homoglyph hidden inside a base64 wrapper
 // is only visible after decoding. The cost is one extra regex/entropy pass
 // over a short decoded string.
-func normalize(raw string, cfg config) NormalizeResult {
+//
+// rs is the caller's active ruleset (cfg.rules for ScanInput,
+// cfg.indirectRules for ScanUntrusted). normalize runs L2 over each
+// extra base64-substring payload, so it must use the caller's set rather
+// than reaching for cfg.rules — the indirect ruleset is deliberately
+// narrower, and scanning a RAG document's payloads with the input ruleset
+// flags exactly the tutorial prose the indirect set exists to spare.
+func normalize(raw string, cfg config, rs Ruleset) NormalizeResult {
 	res := NormalizeResult{Raw: raw}
 
 	subject := raw
@@ -71,12 +78,20 @@ func normalize(raw string, cfg config) NormalizeResult {
 				Category: CategoryEncodingAttack,
 				Score:    l1BaseScores[CategoryEncodingAttack],
 				Evidence: fmt.Sprintf("decoded via base64-substr (additional payload: %q)",
-					truncateForEvidence(payload)),
+					truncateRunes(payload, maxAdditionalEvidencePayload)),
 			})
 			// L2 regex on the additional decoded payload, so a long benign
 			// base64 run cannot hide a sibling attack encoded later in
 			// the same input.
-			res.Findings = append(res.Findings, regexScan(cfg.rules, payload, "decoded-substr")...)
+			//
+			// Span offsets would index the PAYLOAD, not the raw input, so
+			// they are cleared: a caller doing input[Span.Start:Span.End]
+			// would highlight unrelated bytes. Evidence already names the
+			// matched text.
+			for _, f := range regexScan(rs, payload, "decoded-substr") {
+				f.Span = nil
+				res.Findings = append(res.Findings, f)
+			}
 		}
 	}
 
@@ -128,26 +143,12 @@ func scanForms(raw, decoded string) []form {
 // input, and the rolled-up "+N more" Finding preserves the signal.
 const maxSpanFindingsPerCategory = 32
 
-// maxAdditionalEvidencePayload bounds the byte count of decoded
-// payloads shown in the Evidence string of a recursive_decode finding
-// beyond the canonical decoded form. Without a cap, an attacker
-// could plant a megabyte-long base64 substring and pull a megabyte
-// into the Evidence field that the operator then has to log.
+// maxAdditionalEvidencePayload bounds how many runes of a decoded
+// base64-substring payload appear in the Evidence string of its
+// recursive_decode finding. Without a cap, an attacker could plant a
+// megabyte-long base64 substring and pull a megabyte into the Evidence
+// field that the operator then has to log.
 const maxAdditionalEvidencePayload = 64
-
-// truncateForEvidence returns s truncated to maxAdditionalEvidencePayload
-// runes, with an ellipsis appended when truncated.
-func truncateForEvidence(s string) string {
-	const sample = maxAdditionalEvidencePayload
-	count := 0
-	for i := range s {
-		if count == sample {
-			return s[:i] + "…"
-		}
-		count++
-	}
-	return s
-}
 
 // unicodeFindings converts unicode.Anomaly records into Findings, one
 // per (category, span) — not one per anomaly — so a triage UI that uses

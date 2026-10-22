@@ -162,9 +162,12 @@ raw input
 ScanOutput adds:  canary leak · secrets · PII
 ```
 
-Both the raw input AND its whole-string decodings are scanned. Attackers
+Three forms are scanned: the raw input, its whole-string decoding, and
+any further base64 substrings found inside the raw input. Attackers
 split payloads to defeat single-pass checks, so an instruction hidden
-inside a base64 wrapper is only visible after decoding. The L1 layer
+inside a base64 wrapper is only visible after decoding. Payload findings
+carry no byte offset (the offsets would index the decoded payload, not
+the input), so locate them from `Evidence`. The L1 layer
 also tries to recover encodings buried in surrounding text (markdown
 wrappers, JSON envelopes, code fences); for sensitive paths, prefer
 promptbuilder.Wrap on the input side because it is a stronger defense

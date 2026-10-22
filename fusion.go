@@ -11,8 +11,9 @@ import (
 func runPipeline(input string, cfg config, rs Ruleset) Result {
 	start := time.Now()
 
-	// L1: normalization, decoding, structural signals.
-	norm := normalize(input, cfg)
+	// L1: normalization, decoding, structural signals. normalize also
+	// runs L2 over any extra base64-substring payloads, so it needs rs.
+	norm := normalize(input, cfg, rs)
 	findings := norm.Findings
 
 	// L2: authored rules, applied to every distinct form. Scanning the

@@ -105,8 +105,10 @@ const (
 )
 
 // Span is a half-open byte range [Start, End) within the text a Finding
-// was derived from. A nil Span on a Finding means the finding applies to
-// the whole input rather than a specific region.
+// was derived from. A nil Span on a Finding means the finding does not
+// map to a region of the input: it either applies to the whole input, or
+// was matched inside a decoded payload whose offsets are not meaningful
+// against the input. Evidence carries the matched text either way.
 type Span struct {
 	Start, End int
 }
