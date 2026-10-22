@@ -118,7 +118,10 @@ pattern: (?i)\brepeat\s+(?:everything|all|the\s+text|the\s+words|the\s+content)\
 id: PL-004
 category: prompt_leak
 weight: 0.85
-pattern: (?i)\b(?:print|output|repeat|show)\s+(?:everything|all\s+text|all\s+content|the\s+words)\s+(?:above|before|preceding|prior\s+to\s+this)\s*(?:verbatim|word\s+for\s+word|exactly)?\s*[.:]?$
+# (?m) so $ means end-of-LINE. Without it Go's RE2 anchors to end of
+# TEXT and the rule only fired when the repeat instruction was the very
+# last thing in the input — which in practice meant never.
+pattern: (?im)\b(?:print|output|repeat|show)\s+(?:everything|all\s+text|all\s+content|the\s+words)\s+(?:above|before|preceding|prior\s+to\s+this)\s*(?:verbatim|word\s+for\s+word|exactly)?\s*[.:]?$
 
 
 
@@ -169,7 +172,10 @@ pattern: (?i)\[\s*(?:system|assistant|human)\s*\]|###\s*(?:System|Instruction|Re
 id: DF-007
 category: delimiter_framing
 weight: 0.90
-pattern: (?i)^\s*(?:###\s*)?(?:SYSTEM|ASSISTANT)\s*(?:PROMPT)?\s*:\s*(?:you\s+(?:are|must|will)|ignore|disregard)
+# (?m) so ^ means start-of-LINE. Without it the rule only matched a
+# forged header in the FIRST line of input, so an injection buried
+# under retrieved context walked past the rule written to catch it.
+pattern: (?im)^\s*(?:###\s*)?(?:SYSTEM|ASSISTANT)\s*(?:PROMPT)?\s*:\s*(?:you\s+(?:are|must|will)|ignore|disregard)
 
 # ---------------------------------------------------------------------
 # Data exfiltration — routing data to an attacker sink

@@ -288,6 +288,16 @@ These are real, measured, and worth knowing before you rely on it:
   joins two words instead of hiding one (`previous<U+200B>instructions`
   becomes `previousinstructions`) — which is what the model itself sees
   too, so it is not an injection either way.
+- **A document that quotes an attack is flagged as one.** `ScanUntrusted`
+  cannot tell a security tutorial quoting `ignore all previous
+  instructions` from a document issuing it — measured, the tutorial
+  blocks at 0.93 and an incident postmortem quoting the exfiltration it
+  fixed blocks at 0.90. Ordinary technical prose is fine (an ops runbook,
+  API reference, HR policy, bug report and research abstract all return
+  Allow), so this needs the document to *quote* an attack string, not
+  merely to be technical. Wrap retrieved documents with
+  `promptbuilder.Wrap`; that removes the problem rather than tuning
+  around it.
 - **Leetspeak and punctuation insertion are not covered.**
   `ignore 4ll previous instructions` and `ignore, all previous
   instructions` both return Allow. Folding digits to letters would

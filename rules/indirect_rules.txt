@@ -9,10 +9,24 @@
 # phrases like "ignore previous instructions" as examples. Flagging those
 # is a false positive that breaks the user's product.
 #
-# So this set keeps only patterns that are unambiguous in ANY document
-# context — forged chat-template boundaries, second-person addresses to
-# the model, and hard instruction-override constructions. The bar for
-# flagging is deliberately higher than for direct user input.
+# So this set keeps only patterns that are unusually unambiguous in a
+# document context — forged chat-template boundaries, second-person
+# addresses to the model, and hard instruction-override constructions.
+# The bar for flagging is deliberately higher than for direct user input.
+#
+# WHAT THIS SET STILL GETS WRONG. A document that QUOTES an attack as an
+# example is indistinguishable from one that issues it. Measured: a
+# security tutorial quoting "ignore all previous instructions" and "you
+# are now in developer mode" blocks at 0.93, and an incident postmortem
+# describing the exfiltration it fixed blocks at 0.90. Ordinary technical
+# prose is fine — an ops runbook, API reference, HR policy, bug report
+# and research abstract all return Allow — so the false positive needs the
+# document to quote an attack string, not merely to be technical.
+#
+# Nothing in a regex can close this: Go's RE2 has no lookarounds, so "not
+# inside quotation marks" is not expressible. promptbuilder.Wrap is the
+# answer for documents — data-marking removes the quote from the problem
+# entirely, because the model is told the whole chunk is data.
 #
 # Pair this with promptbuilder.Wrap (Spotlighting), which is the cheaper
 # and more reliable defense for indirect injection: if untrusted text is

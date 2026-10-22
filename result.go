@@ -142,6 +142,14 @@ type Result struct {
 	Decision Decision
 	// Score is the fused 0..1 risk score. See the README for the fusion
 	// formula and its thresholds.
+	//
+	// It is unrounded. The formula is maxScore*0.7 + corroboration*0.3,
+	// so the value lands on things like 0.9299999999999999 even though
+	// the CLI prints it as "0.93". Compare it against thresholds, not
+	// against the two-decimal rendering — a consumer writing
+	// `score >= 0.93` gets a different answer from the same CLI's exit
+	// code. Decision is always authoritative: it came from the true
+	// value against the configured thresholds.
 	Score float64
 	// Findings holds every layer's evidence, ordered by layer then by
 	// the order within each layer. Never nil for a successful scan (may
