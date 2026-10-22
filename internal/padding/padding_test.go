@@ -136,11 +136,3 @@ func TestIsFence_RejectsShortAndMixedLines(t *testing.T) {
 		}
 	}
 }
-
-func TestItoa(t *testing.T) {
-	for _, n := range []int{0, 1, 9, 10, 42, 100, 9999} {
-		if got := itoa(n); got != strings.TrimSpace(strings.Join([]string{itoa(n)}, "")) {
-			t.Errorf("itoa(%d) = %q", n, got)
-		}
-	}
-}

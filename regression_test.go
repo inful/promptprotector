@@ -18,7 +18,7 @@ func TestRegression_F1_LeakedCanaryStillBlocks(t *testing.T) {
 	}
 	sys := InsertCanary("You are helpful.", canary)
 
-	res, err := Default.ScanOutput(context.Background(), sys, "my prompt said "+canary)
+	res, err := defaultDetector.ScanOutput(context.Background(), sys, "my prompt said "+canary)
 	if err != nil {
 		t.Fatalf("ScanOutput: %v", err)
 	}
@@ -53,13 +53,13 @@ func TestRegression_F2_MaxInputCapsL2Spans(t *testing.T) {
 	}
 }
 
-// Finding 5: extractCanary accepted any PTP-<hex> in the system prompt,
+// Finding 5: extractCanaries accepted any PTP-<hex> in the system prompt,
 // so an ordinary product identifier became a canary and any output
 // echoing it blocked.
 func TestRegression_F5_ProseTokenIsNotACanary(t *testing.T) {
 	sys := "The API returns PTP-1234 codes for that route."
-	if got := extractCanary(sys); got != "" {
-		t.Errorf("F5: extractCanary(prose) = %q, want empty", got)
+	if got := extractCanaries(sys); len(got) != 0 {
+		t.Errorf("F5: extractCanaries(prose) = %q, want empty", got)
 	}
 }
 
@@ -69,7 +69,7 @@ func TestRegression_F5_RealCanaryStillDetected(t *testing.T) {
 		t.Fatalf("NewCanary: %v", err)
 	}
 	sys := InsertCanary("You are helpful.", canary)
-	res, err := Default.ScanOutput(context.Background(), sys, "leaked "+canary)
+	res, err := defaultDetector.ScanOutput(context.Background(), sys, "leaked "+canary)
 	if err != nil {
 		t.Fatalf("ScanOutput: %v", err)
 	}

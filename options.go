@@ -25,12 +25,18 @@ type Option func(*config)
 //	base, _ := promptprotector.DefaultRuleset()
 //	base.Rules = append(base.Rules, myExtraRule)
 //	guard := promptprotector.New(promptprotector.WithRules(base))
+//
+// A nil Rules means "not supplied" and keeps the built-in. An empty but
+// non-nil Rules means "no rules": pass Ruleset{Rules: []Rule{}}, or the
+// result of ParseRuleset on a file whose rules are all commented out, to
+// run the pipeline with detection switched off.
 func WithRules(rs Ruleset) Option {
 	return func(c *config) { c.rules = cloneRuleset(rs) }
 }
 
 // WithIndirectRules replaces the ruleset used by ScanUntrusted. As with
-// WithRules, the ruleset is copied before being stored.
+// WithRules, the ruleset is copied before being stored, nil means "not
+// supplied", and an empty non-nil Rules means "no rules".
 func WithIndirectRules(rs Ruleset) Option {
 	return func(c *config) { c.indirectRules = cloneRuleset(rs) }
 }

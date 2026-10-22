@@ -400,12 +400,12 @@ func TestDetector_IsSafeForConcurrentUse(t *testing.T) {
 }
 
 func TestDefault_PackageDetectorIsUsable(t *testing.T) {
-	if Default == nil {
-		t.Fatal("Default is nil")
+	if defaultDetector == nil {
+		t.Fatal("defaultDetector is nil")
 	}
-	res, err := Default.ScanInput(context.Background(), "hello")
+	res, err := defaultDetector.ScanInput(context.Background(), "hello")
 	if err != nil {
-		t.Fatalf("Default.ScanInput: %v", err)
+		t.Fatalf("defaultDetector.ScanInput: %v", err)
 	}
 	if res.Decision != Allow {
 		t.Errorf("decision = %s, want Allow", res.Decision)

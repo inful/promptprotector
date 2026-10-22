@@ -442,3 +442,51 @@ func TestCLI_EmptyStdinIsAllowed(t *testing.T) {
 		t.Errorf("unexpected output for empty input:\n%s", stdout)
 	}
 }
+
+// buildCanaryForTest generates a canary with the same shape the CLI's
+// tests embed, without importing the library's random source into the
+// test's expectations.
+func buildCanaryForTest() string {
+	c, err := promptprotector.NewCanary()
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+// F7: reading a huge file must not be how pp runs out of memory. The
+// library truncates to 32 KiB before scanning, so reading a 10 GB log
+// whole was pure waste that ended in an OOM kill.
+func TestReadInputs_CapsLargeFiles(t *testing.T) {
+	big := filepath.Join(t.TempDir(), "big.log")
+	if err := os.WriteFile(big, bytes.Repeat([]byte("x"), maxReadBytes*2), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inputs, err := readInputs([]string{big}, nil)
+	if err != nil {
+		t.Fatalf("readInputs: %v", err)
+	}
+	if len(inputs) != 1 {
+		t.Fatalf("got %d inputs, want 1", len(inputs))
+	}
+	if len(inputs[0].text) != maxReadBytes {
+		t.Errorf("read %d bytes, want %d", len(inputs[0].text), maxReadBytes)
+	}
+	if !inputs[0].truncated {
+		t.Error("truncated flag not set; the caller cannot report the cut")
+	}
+}
+
+func TestReadInputs_SmallFileNotFlagged(t *testing.T) {
+	small := filepath.Join(t.TempDir(), "small.txt")
+	if err := os.WriteFile(small, []byte("hello"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	inputs, err := readInputs([]string{small}, nil)
+	if err != nil {
+		t.Fatalf("readInputs: %v", err)
+	}
+	if inputs[0].truncated || inputs[0].text != "hello" {
+		t.Errorf("small file: truncated=%v text=%q", inputs[0].truncated, inputs[0].text)
+	}
+}

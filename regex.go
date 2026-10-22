@@ -32,12 +32,20 @@ func regexScan(rs Ruleset, text, formLabel string) []Finding {
 		if loc == nil {
 			continue
 		}
+		// Only the raw form's offsets index the caller's input. Every
+		// other form is a rewritten string — decoded, de-fanged, or a
+		// substring payload — so its offsets would point at unrelated
+		// bytes. Evidence carries the matched text either way.
+		var span *Span
+		if formLabel == formRaw {
+			span = &Span{Start: loc[0], End: loc[1]}
+		}
 		out = append(out, Finding{
 			Layer:    layerL2,
 			Rule:     r.ID,
 			Category: r.Category,
 			Score:    r.Weight,
-			Span:     &Span{Start: loc[0], End: loc[1]},
+			Span:     span,
 			Evidence: formatMatchEvidence(formLabel, r.ID, text[loc[0]:loc[1]]),
 		})
 	}

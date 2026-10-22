@@ -18,7 +18,7 @@ func TestRegression6_F1_MultipleCanariesLeakDetected(t *testing.T) {
 	sys := "header " + c1 + " body " + c2 + " footer"
 	out := "leak: " + c2
 
-	res, _ := Default.ScanOutput(context.Background(), sys, out)
+	res, _ := defaultDetector.ScanOutput(context.Background(), sys, out)
 	if res.Decision != Block {
 		t.Errorf("F1: second canary leak -> %s %.2f, want Block", res.Decision, res.Score)
 	}
@@ -32,7 +32,7 @@ func TestRegression6_F1_CrossPrefixLeak(t *testing.T) {
 	sys := "Internal reference token: " + ptp + " and " + ppb + "."
 	out := "leak " + ppb
 
-	res, _ := Default.ScanOutput(context.Background(), sys, out)
+	res, _ := defaultDetector.ScanOutput(context.Background(), sys, out)
 	if res.Decision != Block {
 		t.Errorf("F1b: PPB-canary leak (both PTP and PPB in sys) -> %s %.2f, want Block",
 			res.Decision, res.Score)
@@ -84,7 +84,7 @@ func TestRegression6_F3_MixedBase64NotHidden(t *testing.T) {
 	junk := strings.Repeat("a", 30) + " "
 	in := junk + benign64 + " " + attack64 + " suffix"
 
-	res, _ := Default.ScanInput(context.Background(), in)
+	res, _ := defaultDetector.ScanInput(context.Background(), in)
 	if res.Decision != Block {
 		t.Errorf("F3: attack base64 hidden by longer benign base64: %s %.2f",
 			res.Decision, res.Score)

@@ -1,6 +1,9 @@
 package padding
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Kind classifies a padding anomaly.
 type Kind string
@@ -26,8 +29,10 @@ type Span struct {
 	Detail string
 }
 
-// Thresholds tunes padding detection. They are exported so an application
-// scanning minified or heavily-formatted documents can raise them.
+// Thresholds tunes padding detection. The fields are exported for the
+// internal callers that pass a tuned value to Detect; because this package
+// lives under internal/, no application outside this module can reach
+// them, so they are not a supported extension point.
 type Thresholds struct {
 	// MinRepeats is how many times one line must recur to count.
 	MinRepeats int
@@ -122,7 +127,7 @@ func repeatedLines(lines []line, t Thresholds) []Span {
 			Start:  lines[startLine].start,
 			End:    lines[endLine].end,
 			Lines:  endLine - startLine + 1,
-			Detail: "line repeated " + itoa(n) + " times",
+			Detail: "line repeated " + strconv.Itoa(n) + " times",
 		})
 	}
 	return out
@@ -142,7 +147,7 @@ func fenceRuns(lines []line, t Thresholds) []Span {
 				Start:  lines[runStart].start,
 				End:    lines[endLine].end,
 				Lines:  runCount,
-				Detail: "separator-only run of " + itoa(runCount) + " lines",
+				Detail: "separator-only run of " + strconv.Itoa(runCount) + " lines",
 			})
 		}
 		runStart = -1
@@ -183,19 +188,4 @@ func isFence(text string) bool {
 		}
 	}
 	return true
-}
-
-// itoa avoids importing strconv for one call site in a hot-ish path.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(buf[i:])
 }

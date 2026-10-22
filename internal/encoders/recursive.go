@@ -72,15 +72,12 @@ var base64SubstrRe = regexp.MustCompile(`[A-Za-z0-9+/]{32,}={0,2}`)
 // viable payload as its own finding, so a long benign run no longer
 // hides a sibling attack.
 func decodeBase64Substring(s string) (string, error) {
-	for _, sub := range base64SubstrRe.FindAllString(s, -1) {
-		decoded, err := Base64(sub)
-		if err != nil {
-			continue
-		}
-		if !isText(decoded) {
-			continue
-		}
-		return decoded, nil
+	// Built on ScanAllBase64Payloads rather than repeating its regex,
+	// decode and isText gate: normalize calls that function on the same
+	// string moments later, so a second pass over the same candidates was
+	// work done twice on every scan containing base64.
+	if payloads := ScanAllBase64Payloads(s, 1); len(payloads) > 0 {
+		return payloads[0], nil
 	}
 	return s, ErrNoMatch
 }

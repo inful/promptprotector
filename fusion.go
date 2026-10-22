@@ -1,7 +1,9 @@
 package promptprotector
 
 import (
+	"cmp"
 	"math"
+	"slices"
 	"time"
 )
 
@@ -18,13 +20,16 @@ func runPipeline(input string, cfg config, rs Ruleset) Result {
 
 	// L2: authored rules, applied to every distinct form. Scanning the
 	// decoded form matters: an attack wrapped in base64 still trips the
-	// same rule the clear text would.
+	// same rule the clear text would. Scanning the de-fanged form matters
+	// for the same reason one level down: the rules match literal ASCII,
+	// so a zero-width character dropped into the middle of "instructions"
+	// hides the phrase from every one of them.
 	//
 	// norm.Raw, not input: normalize truncates to maxInputBytes and
 	// stores the capped string there. Using the original input here would
 	// let L2 scan the whole thing and report spans past the documented
 	// cap, which is the only bound a caller has on this work.
-	for _, f := range scanForms(norm.Raw, norm.Decoded) {
+	for _, f := range scanForms(norm.Raw, norm.Decoded, norm.Defanged) {
 		findings = append(findings, regexScan(rs, f.text, f.label)...)
 	}
 
@@ -104,16 +109,17 @@ func fuse(findings []Finding, cfg config) (float64, Decision) {
 		score = 1
 	}
 
+	decision := decide(score, cfg)
 	if cfg.logger != nil {
 		cfg.logger.Debug("promptprotector scan",
-			"decision", decide(score, cfg),
+			"decision", decision,
 			"score", score,
 			"findings", len(findings),
 			"categories", len(bestByCat),
 		)
 	}
 
-	return score, decide(score, cfg)
+	return score, decision
 }
 
 // layerConfidence scales a finding by how trustworthy its producing layer
@@ -170,11 +176,6 @@ func sortedValuesDesc(m map[Category]float64) []float64 {
 	for _, v := range m {
 		values = append(values, v)
 	}
-	// Insertion sort: the slice is tiny (one entry per distinct category).
-	for i := 1; i < len(values); i++ {
-		for j := i; j > 0 && values[j] > values[j-1]; j-- {
-			values[j], values[j-1] = values[j-1], values[j]
-		}
-	}
+	slices.SortFunc(values, func(a, b float64) int { return cmp.Compare(b, a) })
 	return values
 }

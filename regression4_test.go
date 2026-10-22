@@ -31,7 +31,7 @@ func TestRegression4_F1_BuriedBase64AttackBlocked(t *testing.T) {
 		"```text\n" + b64 + "\n```",
 	}
 	for _, in := range cases {
-		res, err := Default.ScanInput(context.Background(), in)
+		res, err := defaultDetector.ScanInput(context.Background(), in)
 		if err != nil {
 			t.Fatalf("ScanInput: %v", err)
 		}
@@ -51,7 +51,7 @@ func TestRegression4_F1_BuriedPlainStaysClean(t *testing.T) {
 		strings.Repeat("x", 100000),
 		strings.Repeat("aaaa", 25000),
 	} {
-		res, _ := Default.ScanInput(context.Background(), in)
+		res, _ := defaultDetector.ScanInput(context.Background(), in)
 		if res.Decision != Allow {
 			t.Errorf("F1b: plain long run -> %s %.2f, want Allow",
 				res.Decision, res.Score)
@@ -92,7 +92,7 @@ func TestRegression4_F2_CanaryKeptWhenRedactionOff(t *testing.T) {
 	sys := InsertCanary("help", canary)
 	out := "leak " + canary
 
-	res, _ := Default.ScanOutput(context.Background(), sys, out)
+	res, _ := defaultDetector.ScanOutput(context.Background(), sys, out)
 	if res.Decision != Block {
 		t.Fatalf("F2b: canary leak -> %s %.2f, want Block", res.Decision, res.Score)
 	}
@@ -110,7 +110,7 @@ func TestRegression4_F2_CanaryKeptWhenRedactionOff(t *testing.T) {
 // F3: 5000 disjoint zero-width spans must NOT produce 5000 findings.
 func TestRegression4_F3_UnicodeFloodCapped(t *testing.T) {
 	in := strings.Repeat("a\u200bb", 5000) // 25KB
-	res, _ := Default.ScanInput(context.Background(), in)
+	res, _ := defaultDetector.ScanInput(context.Background(), in)
 	zw := 0
 	for _, f := range res.Findings {
 		if f.Category == CategoryZeroWidth {
@@ -163,7 +163,7 @@ func promptbuilderAsymmetricLengthCheck(t *testing.T) bool {
 	// confirm ScanOutput reports the leak (Allow, not Block, because
 	// both sides reject short tokens).
 	sys := "PPB-aaaaaaaaaaaa"
-	res, _ := Default.ScanOutput(context.Background(), sys, "leak PPB-aaaaaaaaaaaa")
+	res, _ := defaultDetector.ScanOutput(context.Background(), sys, "leak PPB-aaaaaaaaaaaa")
 	return res.Decision != Block
 }
 

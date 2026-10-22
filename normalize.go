@@ -82,24 +82,21 @@ func normalize(raw string, cfg config, rs Ruleset) NormalizeResult {
 			})
 			// L2 regex on the additional decoded payload, so a long benign
 			// base64 run cannot hide a sibling attack encoded later in
-			// the same input.
-			//
-			// Span offsets would index the PAYLOAD, not the raw input, so
-			// they are cleared: a caller doing input[Span.Start:Span.End]
-			// would highlight unrelated bytes. Evidence already names the
-			// matched text.
-			for _, f := range regexScan(rs, payload, "decoded-substr") {
-				f.Span = nil
-				res.Findings = append(res.Findings, f)
-			}
+			// the same input. regexScan drops the span for this form
+			// because its offsets index the payload, not the input.
+			res.Findings = append(res.Findings, regexScan(rs, payload, formDecodedSubst)...)
 		}
 	}
 
-	// L1b/L1c: scan each distinct form.
-	for _, form := range scanForms(subject, res.Decoded) {
+	// L1b/L1c: scan each distinct form. The de-fanged form is deliberately
+	// NOT included — these sub-scans look for the very characters Strip
+	// removes, so it could only ever repeat what the raw scan found.
+	res.Defanged = unicode.Strip(subject)
+
+	for _, form := range scanForms(subject, res.Decoded, "") {
 		res.Findings = append(res.Findings, unicodeFindings(form.label, form.text)...)
 		res.Findings = append(res.Findings, entropyFindings(cfg, form)...)
-		res.Findings = append(res.Findings, paddingFindings(cfg, form)...)
+		res.Findings = append(res.Findings, paddingFindings(form)...)
 	}
 
 	if res.Truncated {
@@ -123,14 +120,31 @@ type form struct {
 	text  string
 }
 
+// Form labels. Only formRaw's findings carry a Span usable against the
+// caller's input; see regexScan.
+const (
+	formRaw          = "raw"
+	formDecoded      = "decoded"
+	formDefanged     = "defanged"
+	formDecodedSubst = "decoded-substr"
+)
+
 // scanForms returns the distinct forms worth scanning: always the raw
 // input, plus the decoded form when decoding actually changed something.
 // When they are identical we scan once, so a clean input never produces
 // duplicate findings.
-func scanForms(raw, decoded string) []form {
-	forms := []form{{label: "raw", text: raw}}
+//
+// defanged is passed as "" by the L1 sub-scans — they are looking for the
+// very characters Strip removes, so scanning the stripped form would only
+// ever find what the raw scan already found. It exists for L2, whose rules
+// match literal ASCII and cannot see through the obfuscation.
+func scanForms(raw, decoded, defanged string) []form {
+	forms := []form{{label: formRaw, text: raw}}
 	if decoded != "" && decoded != raw {
-		forms = append(forms, form{label: "decoded", text: decoded})
+		forms = append(forms, form{label: formDecoded, text: decoded})
+	}
+	if defanged != "" && defanged != raw {
+		forms = append(forms, form{label: formDefanged, text: defanged})
 	}
 	return forms
 }
@@ -231,12 +245,8 @@ func entropyFindings(cfg config, f form) []Finding {
 // separator-fence anomalies. These were folded in from the planned L3
 // structural layer, which was redundant with L1 and L2 except for this
 // detector — see the PLAN.md note on the 1E scope reduction.
-func paddingFindings(cfg config, f form) []Finding {
-	th := padding.Default()
-	th.MinRepeats = cfg.paddingMinRepeats
-	th.MinFenceLines = cfg.paddingMinFences
-
-	spans := padding.Detect(f.text, th)
+func paddingFindings(f form) []Finding {
+	spans := padding.Detect(f.text, padding.Default())
 	if len(spans) == 0 {
 		return nil
 	}

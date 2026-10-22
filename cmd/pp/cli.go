@@ -180,6 +180,10 @@ func runScan(c cli, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	worst := exitAllow
 	for _, in := range inputs {
+		if in.truncated {
+			printf(stderr, "pp: %s: read only the first %d bytes; the rest was not scanned\n",
+				in.name, maxReadBytes)
+		}
 		res, scanErr := scanOne(detector, c.Mode, system, in.text)
 		if scanErr != nil {
 			printf(stderr, "pp: %s: %v\n", in.name, scanErr)
@@ -203,38 +207,69 @@ func runScan(c cli, stdin io.Reader, stdout, stderr io.Writer) int {
 	return worst
 }
 
-// input pairs the text to scan with the label used in output.
+// maxReadBytes bounds how much of each input pp pulls into memory. The
+// library truncates to 32 KiB before scanning, so reading a 10 GB log
+// whole is pure waste that ends in an OOM kill rather than a scan.
+const maxReadBytes = 1 << 20
+
+// input pairs the text to scan with the label used in output. truncated
+// records that maxReadBytes cut the source short, so the caller can say so
+// rather than reporting a verdict over a silently partial file.
 type input struct {
-	name string
-	text string
+	name      string
+	text      string
+	truncated bool
+}
+
+// readCapped reads at most maxReadBytes from r and reports whether more
+// was available.
+func readCapped(r io.Reader) (string, bool, error) {
+	data, err := io.ReadAll(io.LimitReader(r, maxReadBytes+1))
+	if err != nil {
+		return "", false, err
+	}
+	if len(data) > maxReadBytes {
+		return string(data[:maxReadBytes]), true, nil
+	}
+	return string(data), false, nil
+}
+
+// readFileCapped is readCapped for a named path.
+func readFileCapped(path string) (string, bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false, err
+	}
+	defer func() { _ = f.Close() }()
+	return readCapped(f)
 }
 
 // readInputs reads each path, or stdin when no paths are given. "-"
 // means stdin, so `pp -` works as an explicit form.
 func readInputs(paths []string, stdin io.Reader) ([]input, error) {
 	if len(paths) == 0 {
-		text, err := io.ReadAll(stdin)
+		text, cut, err := readCapped(stdin)
 		if err != nil {
 			return nil, fmt.Errorf("read stdin: %w", err)
 		}
-		return []input{{name: "<stdin>", text: string(text)}}, nil
+		return []input{{name: "<stdin>", text: text, truncated: cut}}, nil
 	}
 
 	out := make([]input, 0, len(paths))
 	for _, p := range paths {
 		if p == "-" {
-			text, err := io.ReadAll(stdin)
+			text, cut, err := readCapped(stdin)
 			if err != nil {
 				return nil, fmt.Errorf("read stdin: %w", err)
 			}
-			out = append(out, input{name: "<stdin>", text: string(text)})
+			out = append(out, input{name: "<stdin>", text: text, truncated: cut})
 			continue
 		}
-		data, err := os.ReadFile(p)
+		text, cut, err := readFileCapped(p)
 		if err != nil {
 			return nil, fmt.Errorf("read %s: %w", p, err)
 		}
-		out = append(out, input{name: p, text: string(data)})
+		out = append(out, input{name: p, text: text, truncated: cut})
 	}
 	return out, nil
 }
@@ -375,15 +410,4 @@ func renderText(w io.Writer, name string, res promptprotector.Result) error {
 	}
 	_, err := io.WriteString(w, b.String())
 	return err
-}
-
-// buildCanaryForTest generates a canary with the same shape the CLI's
-// tests embed, without importing the library's random source into the
-// test's expectations.
-func buildCanaryForTest() string {
-	c, err := promptprotector.NewCanary()
-	if err != nil {
-		panic(err)
-	}
-	return c
 }

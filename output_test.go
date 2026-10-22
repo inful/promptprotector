@@ -18,8 +18,14 @@ var canaryCases = []struct {
 	{"clean output", func(string) string { return "The weather is fine today." }, false, false},
 	{"exact leak", func(c string) string { return "My instructions say " + c }, true, false},
 	{"one char typo", func(c string) string { return "I was told " + c[:len(c)-1] + "z" }, true, false},
-	{"two char typos is not a leak", func(c string) string {
+	// leakTolerance is 2 because a transposition costs two edits and a
+	// one-character deletion was previously invisible to the fixed-width
+	// window. Three edits stays outside it.
+	{"two char typos is a leak", func(c string) string {
 		return "I was told " + c[:len(c)-2] + "zz"
+	}, true, false},
+	{"three char typos is not a leak", func(c string) string {
+		return "I was told " + c[:len(c)-3] + "zzz"
 	}, false, false},
 	{"truncated is not a leak", func(string) string { return "My secret is PTP-abc" }, false, false},
 	{"empty output", func(string) string { return "" }, false, false},
@@ -81,8 +87,8 @@ func TestNewCanary_ProducesValidSystemPrompt(t *testing.T) {
 	}
 	// The token must be recoverable from the prompt, since scanOutputLeak
 	// has no other way to learn it.
-	if extractCanary(sys) != canary {
-		t.Errorf("extractCanary round-trip failed: got %q, want %q", extractCanary(sys), canary)
+	if got := extractCanaries(sys); len(got) != 1 || got[0] != canary {
+		t.Errorf("extractCanaries round-trip failed: got %q, want [%q]", got, canary)
 	}
 	// The instruction must not itself look like an injection attempt, or
 	// it would trip our own scanner when scanned as untrusted text.

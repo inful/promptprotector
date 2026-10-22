@@ -57,7 +57,14 @@ func newConfig(opts ...Option) (config, error) {
 		cfg.rules = rs
 	}
 	if cfg.indirectRules.Rules == nil {
-		rs, _ := IndirectRuleset()
+		// The error is returned, not discarded: a failed parse yields a
+		// nil Rules slice, which regexScan treats as "no rules", so
+		// swallowing it would make ScanUntrusted silently detect nothing
+		// on exactly the path that is meant to be the strictest.
+		rs, err := IndirectRuleset()
+		if err != nil {
+			return cfg, err
+		}
 		cfg.indirectRules = rs
 	}
 	if err := validateConfig(&cfg); err != nil {
@@ -66,9 +73,12 @@ func newConfig(opts ...Option) (config, error) {
 	return cfg, nil
 }
 
-// Default is a ready-to-use Detector built from the shipped defaults. Use
-// New instead when you need to tune anything.
-var Default = MustNew()
+// defaultDetector backs the package-level Scan functions. It is
+// deliberately unexported: an exported package-level Detector is
+// assignable, so any one caller could swap in a weakened configuration
+// and change detection for every other user of this package in the
+// process. Callers who need to tune anything call New.
+var defaultDetector = MustNew()
 
 // ScanInput analyses text the user typed directly. It uses the default
 // ruleset, which is tuned for deliberate input and therefore has a lower
@@ -87,7 +97,7 @@ var Default = MustNew()
 //		log.Warn("suspicious input", "score", res.Score)
 //	}
 func ScanInput(ctx context.Context, text string) (Result, error) {
-	return Default.ScanInput(ctx, text)
+	return defaultDetector.ScanInput(ctx, text)
 }
 
 // ScanUntrusted analyses text the model is about to READ but that did not
@@ -99,7 +109,7 @@ func ScanInput(ctx context.Context, text string) (Result, error) {
 // documentation. Pair it with promptbuilder.Wrap (Spotlighting), which is
 // a stronger defense than detection alone.
 func ScanUntrusted(ctx context.Context, text string) (Result, error) {
-	return Default.ScanUntrusted(ctx, text)
+	return defaultDetector.ScanUntrusted(ctx, text)
 }
 
 // ScanOutput analyses text the model produced, using the system prompt to
@@ -109,7 +119,7 @@ func ScanUntrusted(ctx context.Context, text string) (Result, error) {
 // had InsertCanary applied — in which case the check is inert. Enable
 // WithRedaction to keep matched values out of the Result.
 func ScanOutput(ctx context.Context, system, output string) (Result, error) {
-	return Default.ScanOutput(ctx, system, output)
+	return defaultDetector.ScanOutput(ctx, system, output)
 }
 
 // ScanInput analyses user-typed text. See the package-level ScanInput.

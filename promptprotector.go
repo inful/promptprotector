@@ -13,9 +13,13 @@
 //	               rtl_override, homoglyph, high_entropy,
 //	               context_padding).
 //	L2 regex       the ruleset — see DefaultRuleset and ParseRuleset —
-//	               matched against three forms: the raw input, the
-//	               canonical whole-string decoding, and any further
-//	               base64-substring payloads found in the raw input.
+//	               matched against four forms: the raw input, the
+//	               canonical whole-string decoding, a de-fanged copy
+//	               with invisible characters removed and homoglyphs
+//	               folded to Latin, and any further base64-substring
+//	               payloads found in the raw input. Only raw findings
+//	               carry a Span, because the other three are rewritten
+//	               strings and their offsets do not index the input.
 //	               Emits intent categories (instruction_override,
 //	               role_hijack, prompt_leak, delimiter_framing,
 //	               data_exfiltration, social_engineering).

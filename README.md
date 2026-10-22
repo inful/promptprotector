@@ -162,12 +162,15 @@ raw input
 ScanOutput adds:  canary leak · secrets · PII
 ```
 
-Three forms are scanned: the raw input, its whole-string decoding, and
-any further base64 substrings found inside the raw input. Attackers
-split payloads to defeat single-pass checks, so an instruction hidden
-inside a base64 wrapper is only visible after decoding. Payload findings
-carry no byte offset (the offsets would index the decoded payload, not
-the input), so locate them from `Evidence`. The L1 layer
+Four forms are scanned: the raw input, its whole-string decoding, a
+de-fanged copy with zero-width and bidi controls removed and homoglyphs
+folded to Latin, and any further base64 substrings found inside the raw
+input. Attackers split payloads and insert invisible characters to defeat
+single-pass checks, so an instruction hidden inside a base64 wrapper — or
+broken up as `instructi<U+200B>ons` — is only visible after that pass.
+Findings from the three rewritten forms carry no byte offset (the offsets
+would index the rewritten text, not the input), so locate them from
+`Evidence`. The L1 layer
 also tries to recover encodings buried in surrounding text (markdown
 wrappers, JSON envelopes, code fences); for sensitive paths, prefer
 promptbuilder.Wrap on the input side because it is a stronger defense
@@ -252,6 +255,17 @@ These are real, measured, and worth knowing before you rely on it:
 - **Entropy detection covers binary blobs, not base64-of-text.** base64
   does not add entropy to its input, so base64 of English reaches only
   ~4.9 bits/byte. That case is caught by the decoders instead.
+- **De-fanging removes characters, it does not reword.** The zero-width
+  and homoglyph characters are deleted or folded so the rules can see
+  the words underneath. A zero-width character used *instead of* a space
+  joins two words instead of hiding one (`previous<U+200B>instructions`
+  becomes `previousinstructions`) — which is what the model itself sees
+  too, so it is not an injection either way.
+- **Leetspeak and punctuation insertion are not covered.**
+  `ignore 4ll previous instructions` and `ignore, all previous
+  instructions` both return Allow. Folding digits to letters would
+  generate false positives on ordinary text, so this needs a different
+  normalisation pass rather than a wider rule set.
 
 ## Performance
 

@@ -46,7 +46,11 @@ type Rule struct {
 // or ID does not silently change Detectors that already absorbed the
 // values.
 func cloneRuleset(rs Ruleset) Ruleset {
-	if len(rs.Rules) == 0 {
+	// Only a nil slice is collapsed, so WithRules(Ruleset{Rules: []Rule{}})
+	// keeps meaning "no rules" — newConfig reads nil as "caller did not
+	// supply one". Collapsing empty as well made an empty ruleset silently
+	// become the 34-rule default, the opposite of what the caller asked.
+	if rs.Rules == nil {
 		return Ruleset{}
 	}
 	out := make([]Rule, len(rs.Rules))
@@ -94,7 +98,10 @@ var knownCategories = map[Category]bool{
 // are all errors. Silently ignoring a misspelled "weigth:" would leave
 // the rule at its zero weight and quietly disable it.
 func ParseRuleset(src string) (Ruleset, error) {
-	var rs Ruleset
+	// Non-nil from the start: a ruleset file with every rule commented out
+	// parses to zero rules, which is what the author asked for, rather
+	// than nil, which means "unset" and gets the default back.
+	rs := Ruleset{Rules: []Rule{}}
 	seen := make(map[string]bool)
 
 	for i, block := range splitBlocks(src) {

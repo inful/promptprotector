@@ -20,12 +20,10 @@ const (
 // value is not usable — start from defaultConfig(). Functional options
 // (added in sub-phase 1F) populate a copy of it.
 type config struct {
-	decodeDepth       int
-	entropyWindow     int
-	entropyThreshold  float64
-	maxInputBytes     int
-	paddingMinRepeats int
-	paddingMinFences  int
+	decodeDepth      int
+	entropyWindow    int
+	entropyThreshold float64
+	maxInputBytes    int
 
 	// Fusion weights and thresholds. fusionMaxWeight and
 	// fusionCorrobWeight are the two terms of the fused score and must
@@ -63,9 +61,6 @@ func defaultConfig() config {
 		entropyThreshold: 5.0,
 		maxInputBytes:    32 << 10, // 32 KiB
 
-		paddingMinRepeats: 5,
-		paddingMinFences:  10,
-
 		// The two fusion terms must sum to <= 1 so the fused score cannot
 		// exceed the unit range. 0.7/0.3 favours a single strong signal
 		// while still letting corroboration tip a borderline case.
@@ -83,8 +78,13 @@ func defaultConfig() config {
 // NormalizeResult is the L1 layer's output. Decoded is empty when nothing
 // was decoded; Chain lists the decoders that fired in application order.
 type NormalizeResult struct {
-	Raw       string
-	Decoded   string
+	Raw string
+	// Decoded is the whole-string decoding, empty when nothing decoded.
+	Decoded string
+	// Defanged is Raw with zero-width and bidi controls removed and
+	// homoglyphs folded to Latin. It equals Raw when the input carried no
+	// such characters, which is the normal case.
+	Defanged  string
 	Chain     []string
 	Findings  []Finding
 	Truncated bool
