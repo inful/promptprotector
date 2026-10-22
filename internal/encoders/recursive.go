@@ -117,16 +117,16 @@ func RecursiveDecode(s string, maxDepth int) (string, []string) {
 	return s, chain
 }
 
-// ScanAllBase64Payloads scans the ORIGINAL raw input for base64-shaped
+// ScanAllBase64Payloads scans the ORIGINAL raw input for encoding-shaped
 // substrings and returns the decoded payload of each that passes the
 // isText gate. Up to limit results are returned.
 //
 // This is called separately by normalize.go AFTER RecursiveDecode so
-// that an input containing multiple base64-shaped substrings yields a
+// that an input containing multiple encoded substrings yields a
 // recursive_decode finding per payload, not just the single one that
-// became the canonical decoded form. Without this, a long benign base64
-// run would let the substring decoder pick it and miss a smaller attack
-// run later in the same input.
+// became the canonical decoded form. Without this, a long benign run
+// would let the substring decoder pick it and miss a smaller attack run
+// later in the same input.
 func ScanAllBase64Payloads(s string, limit int) []string {
 	if limit <= 0 {
 		return nil
@@ -137,11 +137,8 @@ func ScanAllBase64Payloads(s string, limit int) []string {
 	}
 	var out []string
 	for _, sub := range matches {
-		decoded, err := Base64(sub)
-		if err != nil {
-			continue
-		}
-		if !isText(decoded) {
+		decoded, ok := textDecode(sub)
+		if !ok {
 			continue
 		}
 		out = append(out, decoded)
@@ -150,6 +147,46 @@ func ScanAllBase64Payloads(s string, limit int) []string {
 		}
 	}
 	return out
+}
+
+// textDecode decodes candidate as base64, then as hex, returning the
+// first result that looks like text.
+//
+// The hex fallback exists because the two alphabets overlap: every hex
+// digit is a valid base64 character, so base64SubstrRe does find a
+// hex-encoded payload buried in prose — but its length is rarely a
+// multiple of four, so Base64 rejects it and the payload was skipped
+// entirely. Measured: "notes: <hex> end" returned Allow 0.00 with no
+// findings, while the same payload hex-encoded as the whole input was
+// caught. Adding the fallback costs no false positives on prose carrying
+// hex-looking strings (checked against commit SHAs, ETags and tokens).
+//
+// shortcut: percent-encoded and \u-escaped payloads embedded in
+// surrounding text are still missed — neither produces a long run of
+// base64-alphabet characters, so they need their own scanner patterns,
+// and a %XX run is common in ordinary URLs. They are detected only when
+// the whole input is the payload.
+func textDecode(candidate string) (string, bool) {
+	if decoded, err := Base64(candidate); err == nil && isText(decoded) {
+		return decoded, true
+	}
+	if len(candidate)%2 == 0 && isHexRun(candidate) {
+		if decoded, err := Hex(candidate); err == nil && isText(decoded) {
+			return decoded, true
+		}
+	}
+	return "", false
+}
+
+// isHexRun reports whether every byte is a hex digit.
+func isHexRun(s string) bool {
+	for i := range len(s) {
+		c := s[i]
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return false
+		}
+	}
+	return len(s) > 0
 }
 
 // textAsciiRatio is the share of runes a decode must have in the ASCII
