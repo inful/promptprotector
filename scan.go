@@ -158,12 +158,14 @@ func (d *Detector) ScanOutput(ctx context.Context, system, output string) (Resul
 		findings = append(findings, *f)
 	}
 	if truncated {
+		dropped := len(output) - d.cfg.maxInputBytes
 		findings = append(findings, Finding{
 			Layer:    layerOutput,
 			Rule:     "input_truncated",
 			Category: CategoryInputTruncated,
 			Score:    l1BaseScores[CategoryInputTruncated],
-			Evidence: fmt.Sprintf("output exceeded %d bytes; scanned the prefix only", d.cfg.maxInputBytes),
+			Evidence: fmt.Sprintf("output exceeded %d bytes; %d byte(s) past the %d-byte prefix were not scanned (canary/secrets/PII in the dropped range went unchecked)",
+				d.cfg.maxInputBytes, dropped, d.cfg.maxInputBytes),
 		})
 	}
 

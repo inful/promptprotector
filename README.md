@@ -65,6 +65,18 @@ if res.Decision == promptprotector.Block {
 }
 ```
 
+The default input cap (`WithMaxInputBytes`, default 32 KiB) applies to
+`ScanOutput` as well as `ScanInput`. A canary or secret in the second
+half of a long response is silently missed. Raise the cap above your
+largest expected response length, or call
+`WithMaxInputBytes(0)` to disable the cap. The truncation finding
+alone does not warn about this; you must size the cap yourself.
+
+When the system prompt plants more than one canary-shaped token (for
+example a per-session canary appended next to the global one), every
+canary in the system is checked — a leak of any one of them is
+detected, not just the first.
+
 ### Indirect injection in RAG
 
 Wrap untrusted retrieved text before it enters the context. This is

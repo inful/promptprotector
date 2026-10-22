@@ -8,7 +8,13 @@ import (
 // regexScan applies a Ruleset to text and returns one Finding per rule
 // that matched. Rules are evaluated against the text as-is: RE2 gives no
 // backreferences, so an obfuscation-resistant "clever" pattern is not
-// achievable here — normalization is L1's job, not L2's.
+// achievable here — most decoding is L1's job, not L2's.
+//
+// The text passed in is whatever the calling context supplies. Today
+// that is the original input (scanForms "raw" form), the canonical
+// decoded form (scanForms "decoded" form), or a per-substring decoded
+// payload emitted by normalize.go when the input contains multiple
+// base64-shaped substrings and the canonical recursion only picks one.
 //
 // A rule matching multiple times still produces a single Finding (the
 // first match position is reported). Triage wants "which rules fired and

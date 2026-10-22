@@ -63,13 +63,19 @@ func WithEntropyThreshold(bits float64) Option {
 }
 
 // WithMaxInputBytes caps how much input is scanned. Input beyond the cap
-// is truncated and the result carries a truncation finding. Set 0 to
-// remove the cap.
+// is truncated and the result carries an input_truncated finding. The
+// cap applies to ALL layers: L1 recursive decoding, L2 regex, and the
+// output-side canary/secrets/PII passes run on the truncated prefix.
 //
-// Cost: the scan is O(cap) across both raw and decoded forms, plus O(n)
-// for secret/PII/canary passes. Measured on a 2026-class CPU: 32 KiB
-// benign input scans in ~50 ms; with the cap disabled, 2 MiB takes
-// ~2.7 s. Anything called in the request path should keep the cap.
+// Operational impact: a canary, secret, or PII hit past the cap is
+// silently unseen. For canary leak detection to cover the full model
+// response, set the cap above the largest expected output length, or
+// call WithMaxInputBytes(0) to disable the cap entirely.
+//
+// Cost: the scan is O(cap). Measured on a 2026-class CPU: 32 KiB benign
+// input scans in ~50 ms; with the cap disabled, 2 MiB takes ~2.7 s.
+// Anything called in the request path should keep the cap, with the
+// canary trade-off in mind.
 func WithMaxInputBytes(n int) Option {
 	return func(c *config) { c.maxInputBytes = n }
 }

@@ -3,7 +3,6 @@ package encoders
 import (
 	"errors"
 	"regexp"
-	"sort"
 )
 
 // ErrNoMatch is returned by substring decoders that look for an embedded
@@ -55,21 +54,25 @@ var l1Decoders = []l1Decoder{
 var base64SubstrRe = regexp.MustCompile(`[A-Za-z0-9+/]{32,}={0,2}`)
 
 // decodeBase64Substring is the substring fallback used by RecursiveDecode
-// when the whole input is not a single encoding. It finds the longest
-// base64-shaped substring, decodes it, and returns the decoded text. If
-// no candidate yields text on decode (e.g., random binary noise from
-// "aaaaaa…"), it returns ErrNoMatch and the outer loop moves on.
+// when the whole input is not a single encoding. It iterates over every
+// base64-shaped substring in source order and returns the FIRST whose
+// decoded form passes the isText gate.
+//
+// The earlier "longest first" heuristic let a long benign run hide a
+// smaller attack run elsewhere in the same input: the decoder picked
+// the longest candidate whose decoded form looked like text, even if a
+// shorter sibling (later in the input) decoded to a less-benign payload.
+// Source order is deterministic but lets an attacker exploit
+// "earliest benign run hides the attack" if the attacker can append
+// benign padding before the payload. The trade-off is documented and
+// mitigated by promptbuilder.Wrap on the input side; it is not a
+// detection-side limit callers can solve on their own.
+//
+// Normalize.go calls ScanAllBase64Payloads separately to surface every
+// viable payload as its own finding, so a long benign run no longer
+// hides a sibling attack.
 func decodeBase64Substring(s string) (string, error) {
-	matches := base64SubstrRe.FindAllString(s, -1)
-	if len(matches) == 0 {
-		return s, ErrNoMatch
-	}
-	// Longest first: a longer candidate is more likely to be a real
-	// payload (≥ 32 chars is short enough to be one full base64 line of
-	// plaintext) and less likely to be a benign phrase that happens
-	// to fit the alphabet.
-	sort.Slice(matches, func(i, j int) bool { return len(matches[i]) > len(matches[j]) })
-	for _, sub := range matches {
+	for _, sub := range base64SubstrRe.FindAllString(s, -1) {
 		decoded, err := Base64(sub)
 		if err != nil {
 			continue
@@ -115,6 +118,41 @@ func RecursiveDecode(s string, maxDepth int) (string, []string) {
 		}
 	}
 	return s, chain
+}
+
+// ScanAllBase64Payloads scans the ORIGINAL raw input for base64-shaped
+// substrings and returns the decoded payload of each that passes the
+// isText gate. Up to limit results are returned.
+//
+// This is called separately by normalize.go AFTER RecursiveDecode so
+// that an input containing multiple base64-shaped substrings yields a
+// recursive_decode finding per payload, not just the single one that
+// became the canonical decoded form. Without this, a long benign base64
+// run would let the substring decoder pick it and miss a smaller attack
+// run later in the same input.
+func ScanAllBase64Payloads(s string, limit int) []string {
+	if limit <= 0 {
+		return nil
+	}
+	matches := base64SubstrRe.FindAllString(s, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	var out []string
+	for _, sub := range matches {
+		decoded, err := Base64(sub)
+		if err != nil {
+			continue
+		}
+		if !isText(decoded) {
+			continue
+		}
+		out = append(out, decoded)
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
 }
 
 // textAsciiRatio is the share of runes a decode must have in the ASCII

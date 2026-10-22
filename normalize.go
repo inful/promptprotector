@@ -31,7 +31,15 @@ func normalize(raw string, cfg config) NormalizeResult {
 		res.Raw = subject
 	}
 
-	// L1a: recursive decoding.
+	// L1a: recursive decoding. The chain records each decoder that fired,
+	// and the FIRST viable decoded form becomes res.Decoded so L2 regex
+	// scans the decoded payload alongside the raw. The substring fallback
+	// has a one-shot limitation — it returns the first viable base64 run
+	// in source order — so normalize.go also calls ScanAllBase64Payloads
+	// on the raw subject and emits a recursive_decode finding per
+	// additional payload. Without this, a long benign base64 run would
+	// let the substring decoder pick it and miss a smaller attack run
+	// later in the same input.
 	decoded, chain := encoders.RecursiveDecode(subject, cfg.decodeDepth)
 	if len(chain) > 0 && decoded != subject {
 		res.Decoded = decoded
@@ -43,6 +51,33 @@ func normalize(raw string, cfg config) NormalizeResult {
 			Score:    l1BaseScores[CategoryEncodingAttack],
 			Evidence: fmt.Sprintf("decoded via %s", strings.Join(chain, " → ")),
 		})
+	}
+	// Surface every viable base64 substring as its own finding AND
+	// scan each with L2 rules. Without the L2 scan here, a payload the
+	// canonical recursion skipped would only emit "I decoded base64"
+	// without revealing whether the payload actually contains an attack.
+	// The cap mirrors matchFindingsCap in output.go.
+	const additionalCap = 32
+	if cfg.decodeDepth > 0 {
+		for _, payload := range encoders.ScanAllBase64Payloads(subject, additionalCap) {
+			// Skip the payload that already became res.Decoded — its
+			// findings have been emitted via scanForms (decoded form).
+			if payload == decoded {
+				continue
+			}
+			res.Findings = append(res.Findings, Finding{
+				Layer:    layerL1,
+				Rule:     "recursive_decode",
+				Category: CategoryEncodingAttack,
+				Score:    l1BaseScores[CategoryEncodingAttack],
+				Evidence: fmt.Sprintf("decoded via base64-substr (additional payload: %q)",
+					truncateForEvidence(payload)),
+			})
+			// L2 regex on the additional decoded payload, so a long benign
+			// base64 run cannot hide a sibling attack encoded later in
+			// the same input.
+			res.Findings = append(res.Findings, regexScan(cfg.rules, payload, "decoded-substr")...)
+		}
 	}
 
 	// L1b/L1c: scan each distinct form.
@@ -58,7 +93,8 @@ func normalize(raw string, cfg config) NormalizeResult {
 			Rule:     "input_truncated",
 			Category: CategoryInputTruncated,
 			Score:    l1BaseScores[CategoryInputTruncated],
-			Evidence: fmt.Sprintf("input exceeded %d bytes; scanned the prefix only", cfg.maxInputBytes),
+			Evidence: fmt.Sprintf("input exceeded %d bytes; %d byte(s) past the %d-byte prefix were not scanned (canary/secrets/PII in the dropped range went unchecked)",
+				cfg.maxInputBytes, len(raw)-cfg.maxInputBytes, cfg.maxInputBytes),
 		})
 	}
 
@@ -92,6 +128,27 @@ func scanForms(raw, decoded string) []form {
 // input, and the rolled-up "+N more" Finding preserves the signal.
 const maxSpanFindingsPerCategory = 32
 
+// maxAdditionalEvidencePayload bounds the byte count of decoded
+// payloads shown in the Evidence string of a recursive_decode finding
+// beyond the canonical decoded form. Without a cap, an attacker
+// could plant a megabyte-long base64 substring and pull a megabyte
+// into the Evidence field that the operator then has to log.
+const maxAdditionalEvidencePayload = 64
+
+// truncateForEvidence returns s truncated to maxAdditionalEvidencePayload
+// runes, with an ellipsis appended when truncated.
+func truncateForEvidence(s string) string {
+	const sample = maxAdditionalEvidencePayload
+	count := 0
+	for i := range s {
+		if count == sample {
+			return s[:i] + "…"
+		}
+		count++
+	}
+	return s
+}
+
 // unicodeFindings converts unicode.Anomaly records into Findings, one
 // per (category, span) — not one per anomaly — so a triage UI that uses
 // Finding.Span for highlighting points at the right region even when an
@@ -99,50 +156,54 @@ const maxSpanFindingsPerCategory = 32
 // count is capped at maxSpanFindingsPerCategory and the rest fold into
 // one summary Finding whose Span is nil and whose Evidence reports the
 // real number of omitted spans.
+//
+// unicode.Scan is called once; the anomalies are grouped by category
+// first so the summary can state the true overflow rather than the cap.
 func unicodeFindings(label, text string) []Finding {
-	// First pass: sum the spans by category so the summary evidence
-	// reports the real omitted count rather than the cap value.
-	totalByCat := map[Category]int{}
-	for _, anomaly := range unicode.Scan(text) {
-		cat, ok := unicodeCategoryFor(anomaly.Category)
-		if !ok {
-			continue
-		}
-		totalByCat[cat] += len(anomaly.Spans)
+	type group struct {
+		category Category
+		detector string
+		spans    []unicode.Span
 	}
-	emitted := map[Category]int{}
-	folded := map[Category]bool{}
-	var out []Finding
+	var groups []group
+	index := map[Category]int{}
 	for _, anomaly := range unicode.Scan(text) {
 		cat, ok := unicodeCategoryFor(anomaly.Category)
 		if !ok {
 			continue
 		}
-		for _, sp := range anomaly.Spans {
-			n := emitted[cat]
-			if n >= maxSpanFindingsPerCategory {
-				if !folded[cat] {
-					out = append(out, Finding{
-						Layer:    layerL1,
-						Rule:     anomaly.Category,
-						Category: cat,
-						Score:    l1BaseScores[cat],
-						Evidence: fmt.Sprintf("%s: +%d more spans omitted (flood)",
-							label, totalByCat[cat]-maxSpanFindingsPerCategory),
-					})
-					folded[cat] = true
-				}
-				continue
+		i, seen := index[cat]
+		if !seen {
+			groups = append(groups, group{category: cat, detector: anomaly.Category})
+			i = len(groups) - 1
+			index[cat] = i
+		}
+		groups[i].spans = append(groups[i].spans, anomaly.Spans...)
+	}
+
+	var out []Finding
+	for _, g := range groups {
+		for i, sp := range g.spans {
+			if i >= maxSpanFindingsPerCategory {
+				break
 			}
 			out = append(out, Finding{
 				Layer:    layerL1,
-				Rule:     anomaly.Category,
-				Category: cat,
-				Score:    l1BaseScores[cat],
+				Rule:     g.detector,
+				Category: g.category,
+				Score:    l1BaseScores[g.category],
 				Span:     &Span{Start: sp.Start, End: sp.End},
 				Evidence: fmt.Sprintf("%s: span [%d,%d)", label, sp.Start, sp.End),
 			})
-			emitted[cat] = n + 1
+		}
+		if extra := len(g.spans) - maxSpanFindingsPerCategory; extra > 0 {
+			out = append(out, Finding{
+				Layer:    layerL1,
+				Rule:     g.detector,
+				Category: g.category,
+				Score:    l1BaseScores[g.category],
+				Evidence: fmt.Sprintf("%s: +%d more spans omitted (flood)", label, extra),
+			})
 		}
 	}
 	return out

@@ -45,14 +45,14 @@ func InsertCanary(system, token string) string {
 // drops a character; two would start matching unrelated text.
 const leakTolerance = 1
 
-// scanOutputLeak reports whether output leaked the canary embedded in
+// scanOutputLeak reports whether output leaked any canary embedded in
 // system. It returns nil when there is no leak.
 //
-// Matching is substring-first (fast path) with a bounded fuzzy fallback:
-// a windowed Levenshtein check that only runs when the exact substring is
-// absent and the output is small enough to be worth it. The window is
-// sized to the canary length so we never do a full O(n*m) distance matrix
-// over a large response.
+// Every canary-shaped token in the system is checked — a system that
+// plants a global canary alongside a per-session canary must catch a
+// leak of either, not just the first. Matches are substring-first with
+// a bounded fuzzy fallback that only runs when the exact substring is
+// absent and the output is small enough to be worth it.
 //
 // redact applies WithRedaction's settings: when true, the canary value
 // is replaced with "[REDACTED]" in Evidence so an operator who has
@@ -62,16 +62,13 @@ func scanOutputLeak(system, output string, redact bool) *Finding {
 	if system == "" || output == "" {
 		return nil
 	}
-	canary := extractCanary(system)
-	if canary == "" {
-		return nil
-	}
-
-	if i := strings.Index(output, canary); i >= 0 {
-		return canaryFinding(canaryEvidence(canary, i, redact, false), false)
-	}
-	if len(output) <= fuzzyMatchCeiling && fuzzyContains(output, canary, leakTolerance) {
-		return canaryFinding(canaryEvidence(canary, -1, redact, true), true)
+	for _, canary := range extractCanaries(system) {
+		if i := strings.Index(output, canary); i >= 0 {
+			return canaryFinding(canaryEvidence(canary, i, redact, false), false)
+		}
+		if len(output) <= fuzzyMatchCeiling && fuzzyContains(output, canary, leakTolerance) {
+			return canaryFinding(canaryEvidence(canary, -1, redact, true), true)
+		}
 	}
 	return nil
 }
@@ -95,36 +92,59 @@ func canaryEvidence(canary string, pos int, redact, fuzzy bool) string {
 // call site readable in this file.
 const minCanaryHexLen = canarypkg.MinHexLen
 
-// extractCanary pulls the canary token out of a system prompt by locating
-// any accepted prefix.
+// extractCanaries pulls every canary-shaped token out of a system prompt.
 //
-// The length floor matters: without it any product identifier that happens
-// to start with "PTP-" or "PPB-" became a canary, so a system prompt
-// documenting a PTP-1234 route code and a response echoing that code
-// scored a 0.95 confirmed leak and blocked. A real canary is always long.
+// The length floor (minCanaryHexLen, in internal/canary) matters: without
+// it any product identifier that happens to start with "PTP-" or "PPB-"
+// became a canary, so a system prompt documenting a PTP-1234 route code
+// and a response echoing that code scored a 0.95 confirmed leak and
+// blocked. A real canary is always long.
 //
 // Accepting both PTP- and PPB- is what makes a system wrapped by the
-// sibling promptbuilder package checkable here — the promptbuilder docs
-// rely on it. The match is anchored at the FIRST hit; prefixing a real
-// canary with a hex string of its own letters in the prompt text is out
-// of scope.
-func extractCanary(system string) string {
+// sibling promptbuilder package checkable here. Every canary prefix in
+// the system prompt is examined — the previous "first wins" behaviour
+// silently missed leaks of any non-first canary (e.g. a per-session
+// canary inserted alongside a global one).
+func extractCanaries(system string) []string {
+	var out []string
 	for _, prefix := range canaryPrefixes {
-		i := strings.Index(system, prefix)
-		if i < 0 {
-			continue
+		// Skip past occurrences we have already accounted for to keep
+		// the scan linear in input size.
+		prev := ""
+		for i := 0; i <= len(system)-len(prefix); {
+			hit := strings.Index(system[i:], prefix)
+			if hit < 0 {
+				break
+			}
+			pos := i + hit
+			rest := system[pos+len(prefix):]
+			end := 0
+			for end < len(rest) && canarypkg.IsHexDigit(rest[end]) {
+				end++
+			}
+			if end >= minCanaryHexLen {
+				canary := system[pos : pos+len(prefix)+end]
+				if canary != prev {
+					out = append(out, canary)
+					prev = canary
+				}
+			}
+			i = pos + len(prefix) + end
 		}
-		rest := system[i+len(prefix):]
-		end := 0
-		for end < len(rest) && canarypkg.IsHexDigit(rest[end]) {
-			end++
-		}
-		if end < minCanaryHexLen {
-			continue
-		}
-		return system[i : i+len(prefix)+end]
 	}
-	return ""
+	return out
+}
+
+// extractCanary returns the first canary-shaped token in system, or ""
+// if none. It is a thin wrapper over extractCanaries for call sites
+// that only need a single canary — scanOutputLeak already calls the
+// full multi-canary scan directly.
+func extractCanary(system string) string {
+	all := extractCanaries(system)
+	if len(all) == 0 {
+		return ""
+	}
+	return all[0]
 }
 
 func canaryFinding(evidence string, fuzzy bool) *Finding {
