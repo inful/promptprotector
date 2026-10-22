@@ -26,6 +26,10 @@ type Option func(*config)
 //	base.Rules = append(base.Rules, myExtraRule)
 //	guard := promptprotector.New(promptprotector.WithRules(base))
 //
+// A Rule you build by hand needs no compiled pattern of its own: New
+// compiles every rule whose Pattern is unset or no longer matches what
+// was compiled, and returns ErrInvalidRuleset if one does not compile.
+//
 // A nil Rules means "not supplied" and keeps the built-in. An empty but
 // non-nil Rules means "no rules": pass Ruleset{Rules: []Rule{}}, or the
 // result of ParseRuleset on a file whose rules are all commented out, to

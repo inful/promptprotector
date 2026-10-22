@@ -1,5 +1,7 @@
 package unicode
 
+import "unicode/utf8"
+
 // homoglyphs maps non-Latin code points that look like Latin letters to
 // their apparent Latin equivalents. The list is small on purpose — adding
 // every Unicode confusable would create too many false positives on
@@ -46,14 +48,26 @@ var homoglyphs = map[rune]rune{
 	'\u03A1': 'P', // GREEK CAPITAL LETTER RHO
 }
 
-// Homoglyph returns the byte spans of contiguous homoglyph runs in s.
-// A "run" is a maximal sequence of characters where each character is
-// either a homoglyph or a Latin letter that shares a Latin "lookalike"
-// with the adjacent homoglyph. So "hеllo" (Cyrillic 'е' between Latin)
-// emits a single span, not three. Inputs with no homoglyphs return nil.
+// Homoglyph returns the byte spans of contiguous homoglyph runs in s
+// that sit next to Latin text. So "hеllo" (Cyrillic 'е' between Latin)
+// emits a single span, not three.
+//
+// The Latin requirement is what separates an attack from a language. A
+// word written entirely in Cyrillic or Greek is ordinary text in that
+// language, not an impersonation of an English word. The previous
+// implementation looked only at the character itself, so "Привет"
+// produced two spans and a Russian document produced a dozen — every one
+// a false positive, and together they cleared warnAbove on any non-Latin
+// input.
 func Homoglyph(s string) []Span {
 	var spans []Span
 	start := -1
+	flush := func(end int) {
+		if start >= 0 && hasLatinNeighbour(s, start, end) {
+			spans = append(spans, Span{Start: start, End: end})
+		}
+		start = -1
+	}
 	for i, r := range s {
 		if _, ok := homoglyphs[r]; ok {
 			if start < 0 {
@@ -61,13 +75,30 @@ func Homoglyph(s string) []Span {
 			}
 			continue
 		}
-		if start >= 0 {
-			spans = append(spans, Span{Start: start, End: i})
-			start = -1
+		flush(i)
+	}
+	flush(len(s))
+	return spans
+}
+
+// hasLatinNeighbour reports whether the run [start, end) touches an
+// ASCII Latin letter on either side. Only ASCII counts: the ruleset
+// this protects is ASCII, so an accented Latin letter is not a
+// lookalike of anything the rules could match.
+func hasLatinNeighbour(s string, start, end int) bool {
+	if start > 0 {
+		if r, _ := utf8.DecodeLastRuneInString(s[:start]); isLatinLetter(r) {
+			return true
 		}
 	}
-	if start >= 0 {
-		spans = append(spans, Span{Start: start, End: len(s)})
+	if end < len(s) {
+		if r, _ := utf8.DecodeRuneInString(s[end:]); isLatinLetter(r) {
+			return true
+		}
 	}
-	return spans
+	return false
+}
+
+func isLatinLetter(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z')
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"regexp"
 	"time"
 )
 
@@ -67,10 +68,44 @@ func newConfig(opts ...Option) (config, error) {
 		}
 		cfg.indirectRules = rs
 	}
+	if err := compileRules(&cfg.rules); err != nil {
+		return cfg, err
+	}
+	if err := compileRules(&cfg.indirectRules); err != nil {
+		return cfg, err
+	}
 	if err := validateConfig(&cfg); err != nil {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+// compileRules gives every rule a compiled pattern.
+//
+// A Rule built by hand has no *regexp.Regexp, and regexScan skips those
+// silently — so the extension pattern the WithRules doc shows (append a
+// Rule to a ruleset from DefaultRuleset) produced a detector that
+// reported no error and matched nothing. Editing Rule.Pattern after the
+// fact had the same effect: the stored regexp still held the old source.
+//
+// Compiling here means the caller never has to reach for ParseRuleset
+// just to add one rule, and a pattern that does not compile is a New()
+// error rather than a mystery. Rules already carrying an up-to-date
+// regexp are left alone, so the built-in sets cost nothing.
+func compileRules(rs *Ruleset) error {
+	for i := range rs.Rules {
+		r := &rs.Rules[i]
+		if r.re != nil && r.re.String() == r.Pattern {
+			continue
+		}
+		re, err := regexp.Compile(r.Pattern)
+		if err != nil {
+			return fmt.Errorf("%w: rule %q: pattern does not compile: %w",
+				ErrInvalidRuleset, r.ID, err)
+		}
+		r.re = re
+	}
+	return nil
 }
 
 // defaultDetector backs the package-level Scan functions. It is

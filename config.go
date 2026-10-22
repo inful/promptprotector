@@ -21,7 +21,6 @@ const (
 // (added in sub-phase 1F) populate a copy of it.
 type config struct {
 	decodeDepth      int
-	entropyWindow    int
 	entropyThreshold float64
 	maxInputBytes    int
 
@@ -48,8 +47,7 @@ type config struct {
 
 func defaultConfig() config {
 	return config{
-		decodeDepth:   3,
-		entropyWindow: 32,
+		decodeDepth: 3,
 		// 5.0 bits/byte sits above English prose (~4.2) and JSON (~4.0)
 		// but below true binary blobs (~6.0). Note that base64 OF
 		// ENGLISH only reaches ~4.9, because base64 does not add entropy

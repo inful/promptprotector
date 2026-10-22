@@ -151,8 +151,9 @@ func categoriesOf(anomalies []Anomaly) []string {
 func TestScan_CategoryOrderIsStable(t *testing.T) {
 	// Even if categories are encountered in different input positions,
 	// Scan emits them in canonical order: zero_width, rtl_override, homoglyph.
-	// Input has homoglyph first, rtl second, zwsp last.
-	anomalies := Scan("\u043A\u202E\u200B")
+	// Input has homoglyph first, rtl second, zwsp last. The Cyrillic 'к'
+	// needs a Latin neighbour to count as a homoglyph at all.
+	anomalies := Scan("k\u043A\u202E\u200B")
 	if len(anomalies) != 3 {
 		t.Fatalf("Scan(combined) len = %d, want 3", len(anomalies))
 	}

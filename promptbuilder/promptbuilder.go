@@ -101,32 +101,18 @@ func InsertCanary(system, token string) string {
 	return system + "\n\n" + fmt.Sprintf(canary.DirectiveFmt, token)
 }
 
-// minCanaryHexLen is the shortest token ExtractCanary will accept.
-// promptbuilder.NewCanary always produces 32 hex characters, so
-// requiring 16 leaves ample margin while rejecting identifiers like
-// "PPB-abcd" that merely appear in prose. The detector in
-// promptprotector uses the same floor, so a token ExtractCanary
-// recovers here will be recognised there.
-const minCanaryHexLen = canary.MinHexLen
-
 // ExtractCanary recovers a token embedded by InsertCanary, returning ""
 // when the prompt has no canary. Both "PPB-" (this package) and "PTP-"
-// (promptprotector) prefixes are accepted.
+// (promptprotector) prefixes are accepted; when a prompt holds one of
+// each, the one appearing first in the text wins.
+//
+// The extraction loop lives in internal/canary so this package and
+// promptprotector cannot drift apart — an earlier version kept its own
+// copy, and a fix to one missed the other.
 func ExtractCanary(system string) string {
-	for _, prefix := range []string{canaryPrefix, canary.PrefixPTP} {
-		i := strings.Index(system, prefix)
-		if i < 0 {
-			continue
-		}
-		rest := system[i+len(prefix):]
-		end := 0
-		for end < len(rest) && canary.IsHexDigit(rest[end]) {
-			end++
-		}
-		if end < minCanaryHexLen {
-			continue
-		}
-		return system[i : i+len(prefix)+end]
+	all := canary.ExtractAll(system, canaryPrefix, canary.PrefixPTP)
+	if len(all) == 0 {
+		return ""
 	}
-	return ""
+	return all[0]
 }

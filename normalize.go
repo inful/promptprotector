@@ -149,6 +149,14 @@ func scanForms(raw, decoded, defanged string) []form {
 	return forms
 }
 
+// entropyWindow is the sliding-window size the high-entropy detector
+// uses. It is a constant rather than a config field because no option
+// could set the previous one: WithEntropyThreshold exists, but a window
+// no caller could reach is a knob in name only. Add WithEntropyWindow
+// alongside it if a minified-JS or config-file scanner needs a
+// different pairing.
+const entropyWindow = 32
+
 // maxSpanFindingsPerCategory bounds the per-(category, form) Finding
 // count emitted by unicodeFindings. Without a cap an attacker can flood
 // the result with thousands of disjoint zero-width-character spans and
@@ -227,7 +235,7 @@ func unicodeFindings(label, text string) []Finding {
 // entropyFindings emits a high-entropy finding when the sliding-window
 // detector finds a qualifying span.
 func entropyFindings(cfg config, f form) []Finding {
-	run := entropy.LongestHighEntropyRun(f.text, cfg.entropyWindow, cfg.entropyThreshold)
+	run := entropy.LongestHighEntropyRun(f.text, entropyWindow, cfg.entropyThreshold)
 	if run.End <= run.Start {
 		return nil
 	}

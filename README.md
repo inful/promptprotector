@@ -237,7 +237,10 @@ not pretend detection is enough.
 These are real, measured, and worth knowing before you rely on it:
 
 - **English-only.** Multilingual injection ("ignoriere les instructions
-  précédentes") is not covered. Ship a per-language ruleset.
+  précédentes") is not covered. Ship a per-language ruleset. Cyrillic
+  and Greek text is not flagged either: the homoglyph detector only
+  fires when a Cyrillic or Greek letter sits next to ASCII Latin, which
+  is what separates `pаssword` from the ordinary Russian word `Привет`.
 - **Paraphrase defeats the rules.** The curated set is literal patterns;
   a reworded attack matches nothing. A classifier would be needed, and
   even classifiers fall to paraphrase (see the Hackett et al. bypass

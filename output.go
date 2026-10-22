@@ -91,18 +91,15 @@ func canaryEvidence(canary string, pos int, redact, fuzzy bool) string {
 	return fmt.Sprintf("canary %s appeared verbatim at byte %d", value, pos)
 }
 
-// minCanaryHexLen is the shortest token extractCanaries accepts. The
-// constant lives in internal/canary; the alias here keeps the existing
-// call site readable in this file.
-const minCanaryHexLen = canarypkg.MinHexLen
-
-// extractCanaries pulls every canary-shaped token out of a system prompt.
+// extractCanaries pulls every canary-shaped token out of a system
+// prompt, via internal/canary — which promptbuilder.ExtractCanary uses
+// too, so the two cannot drift.
 //
-// The length floor (minCanaryHexLen, in internal/canary) matters: without
-// it any product identifier that happens to start with "PTP-" or "PPB-"
-// became a canary, so a system prompt documenting a PTP-1234 route code
-// and a response echoing that code scored a 0.95 confirmed leak and
-// blocked. A real canary is always long.
+// The length floor (minCanaryHexLen) matters: without it any product
+// identifier that happens to start with "PTP-" or "PPB-" became a
+// canary, so a system prompt documenting a PTP-1234 route code and a
+// response echoing that code scored a 0.95 confirmed leak and blocked.
+// A real canary is always long.
 //
 // Accepting both PTP- and PPB- is what makes a system wrapped by the
 // sibling promptbuilder package checkable here. Every canary prefix in
@@ -110,33 +107,7 @@ const minCanaryHexLen = canarypkg.MinHexLen
 // silently missed leaks of any non-first canary (e.g. a per-session
 // canary inserted alongside a global one).
 func extractCanaries(system string) []string {
-	var out []string
-	for _, prefix := range canaryPrefixes {
-		// Skip past occurrences we have already accounted for to keep
-		// the scan linear in input size.
-		prev := ""
-		for i := 0; i <= len(system)-len(prefix); {
-			hit := strings.Index(system[i:], prefix)
-			if hit < 0 {
-				break
-			}
-			pos := i + hit
-			rest := system[pos+len(prefix):]
-			end := 0
-			for end < len(rest) && canarypkg.IsHexDigit(rest[end]) {
-				end++
-			}
-			if end >= minCanaryHexLen {
-				canary := system[pos : pos+len(prefix)+end]
-				if canary != prev {
-					out = append(out, canary)
-					prev = canary
-				}
-			}
-			i = pos + len(prefix) + end
-		}
-	}
-	return out
+	return canarypkg.ExtractAll(system, canaryPrefixes...)
 }
 
 func canaryFinding(evidence string, fuzzy bool) *Finding {

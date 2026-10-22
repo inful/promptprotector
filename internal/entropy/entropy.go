@@ -15,16 +15,25 @@ func Shannon(s string) float64 {
 		return 0
 	}
 	var counts [256]int
+	// Collect the distinct byte values as we count, so the entropy sum
+	// walks len(distinct) terms instead of all 256 slots. The sliding
+	// window calls this once per byte of input, and a 32-byte window
+	// holds at most 32 distinct values — iterating the whole table was
+	// about 8 ms of a 49 ms scan at the 32 KiB cap. Both arrays stay on
+	// the stack: this is called tens of thousands of times per scan.
+	var distinct [256]byte
+	nd := 0
 	for i := 0; i < len(s); i++ {
+		if counts[s[i]] == 0 {
+			distinct[nd] = s[i]
+			nd++
+		}
 		counts[s[i]]++
 	}
 	n := float64(len(s))
 	var h float64
-	for _, c := range counts {
-		if c == 0 {
-			continue
-		}
-		p := float64(c) / n
+	for _, b := range distinct[:nd] {
+		p := float64(counts[b]) / n
 		h -= p * math.Log2(p)
 	}
 	return h

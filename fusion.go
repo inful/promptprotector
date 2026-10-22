@@ -29,8 +29,21 @@ func runPipeline(input string, cfg config, rs Ruleset) Result {
 	// stores the capped string there. Using the original input here would
 	// let L2 scan the whole thing and report spans past the documented
 	// cap, which is the only bound a caller has on this work.
+	// L2 rule IDs are reported once. The forms overlap by design — the
+	// de-fanged copy of a phrase the raw form also matches would
+	// otherwise emit the same rule twice with different span
+	// semantics, which is exactly the "per-occurrence flood" triage
+	// does not want. The first form to match wins, so raw keeps its
+	// span and the rewritten forms only add rules raw could not see.
+	seenRules := make(map[string]bool, len(rs.Rules))
 	for _, f := range scanForms(norm.Raw, norm.Decoded, norm.Defanged) {
-		findings = append(findings, regexScan(rs, f.text, f.label)...)
+		for _, hit := range regexScan(rs, f.text, f.label) {
+			if seenRules[hit.Rule] {
+				continue
+			}
+			seenRules[hit.Rule] = true
+			findings = append(findings, hit)
+		}
 	}
 
 	score, decision := fuse(findings, cfg)
