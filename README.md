@@ -286,9 +286,19 @@ These are real, measured, and worth knowing before you rely on it:
   bomb" is content moderation, a different product (Llama Guard, Granite
   Guardian). The classic "jailbreak" phrasings are covered here because
   they reassign the model's identity.
-- **Not calibrated against a corpus.** The fusion weights and thresholds
-  are reasoned estimates. Treat the verdicts as a starting point and
-  tune against your own traffic.
+- **Detection accuracy is measured, and it is not high.** Against
+  [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections)
+  train (Apache-2.0), scoped to the English positives that use an
+  attack mechanism this library claims to detect: **44 %**. Across all
+  203 positives unscoped it is 15 %, because a third of the corpus is
+  German and a third is persuasion or stylisation rather than injection.
+  On the 343 clean samples it false-positives **0 %**. The held-out test
+  split has not been scored; treat 44 % as the train figure, not a
+  guarantee. See `testdata/SOURCES.md` for the full breakdown and for
+  what a 90 % unscoped figure would actually require.
+- **Fusion weights and thresholds are reasoned estimates,** not fitted.
+  Treat the verdicts as a starting point and tune against your own
+  traffic.
 - **Entropy detection covers binary blobs, not base64-of-text.** base64
   does not add entropy to its input, so base64 of English reaches only
   ~4.9 bits/byte. That case is caught by the decoders instead.

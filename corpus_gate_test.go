@@ -81,8 +81,8 @@ func TestCorpusGate_Recall(t *testing.T) {
 // goals: they exist so that a change which makes detection worse is
 // caught, and are set below the measured values on purpose.
 const (
-	currentUnscopedRecallFloor = 0.04
-	currentScopedRecallFloor   = 0.15
+	currentUnscopedRecallFloor = 0.25
+	currentScopedRecallFloor   = 0.45
 )
 
 func TestCorpusGate_FalsePositiveRate(t *testing.T) {

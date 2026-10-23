@@ -49,17 +49,17 @@
 id: PI-001
 category: instruction_override
 weight: 0.90
-pattern: (?i)\b(ignore|disregard|forget|discard|override)\s+(?:all\s+|any\s+|the\s+|your\s+)*(?:previous|prior|above|earlier|preceding|foregoing|original|initial)\s+(?:system\s+)?(?:instruction|instructions|prompt|prompts|rule|rules|direction|directions|guideline|guidelines|context|conversation|message|messages)\b
+pattern: (?i)\b(?:ignore|disregard|forget|discard|override|remove)\s+(?:all\s+|any\s+|the\s+|your\s+)*(?:previous|prior|above|earlier|preceding|foregoing|original|initial)\s+(?:system\s+)?(?:instruction|instructions|prompt|prompts|rule|rules|direction|directions|guideline|guidelines|context|conversation|message|messages|task|tasks|assignment|assignments|order|orders|command|commands|directive|directives|content)\b|\bleave\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above|earlier|preceding|foregoing|last|original)\s+\w+\s+behind\b
 
 id: PI-002
 category: instruction_override
 weight: 0.90
-pattern: (?i)\b(ignore|disregard|forget)\s+(?:everything|all)\s+(?:you\s+(?:were\s+told|know|learned)|above|before|previously|earlier|so\s+far)\b
+pattern: (?i)\b(?:ignore|disregard|forget)\s+(?:everything|all)\s+(?:you\s+(?:were\s+told|know|learned)|above|before|previously|earlier|so\s+far)\b|\b(?:forget|ignore|disregard)\s+(?:everything|all)\s*[,.;]\s*(?:and\s+|now\s+|then\s+)?(?:write|say|print|tell|answer|respond|output|show|listen|follow|comply|do)\b
 
 id: PI-003
 category: instruction_override
 weight: 0.85
-pattern: (?i)\b(?:new|updated|revised|amended|override|additional)\s+(?:system\s+)?(?:instruction|instructions|prompt|prompts)\s*(?:are\s*)?(?:as\s+follows|below|:)
+pattern: (?i)\b(?:new|updated|revised|amended|override|additional)\s+(?:system\s+)?(?:instruction|instructions|prompt|prompts)\s*(?:are\s*)?(?:as\s+follows|below|:|follow)
 
 id: PI-004
 category: instruction_override
@@ -103,7 +103,7 @@ pattern: (?i)\b(?:enable|activate|turn\s+on|switch\s+(?:on\s+)?to)\s+(?:develope
 id: RH-005
 category: role_hijack
 weight: 0.90
-pattern: (?i)\bpretend\s+(?:that\s+)?you\s+(?:are|were|have)\s+(?:no|not)\s+(?:an?\s+)?(?:AI|assistant|language\s+model|LLM|bot|chatbot|artificial\s+intelligence)\b
+pattern: (?i)\bpretend\s+(?:that\s+)?you\s+(?:are|were|have)\s+(?:(?:no|not)\s+(?:an?\s+|a\s+real\s+)?|(?:an?\s+)?(?:evil|unrestricted|uncensored|amoral|jailbroken|malicious)\s+)(?:AI|assistant|language\s+model|LLM|bot|chatbot|artificial\s+intelligence)\b
 
 id: RH-006
 category: role_hijack
@@ -126,7 +126,7 @@ pattern: (?i)\b(?:for\s+the\s+rest\s+of\s+this\s+conversation,?\s*)?you\s+will\s
 id: PL-001
 category: prompt_leak
 weight: 0.90
-pattern: (?i)\b(?:reveal|show|print|repeat|output|display|echo|dump|disclose)\s+(?:me\s+|us\s+|to\s+me\s+)?(?:your|the\s+system|its\s+own)\s+(?:full\s+|entire\s+|complete\s+|exact\s+|original\s+|initial\s+)?(?:system\s+)?(?:prompt|instruction|instructions|configuration|config|system\s+message)\b
+pattern: (?i)\b(?:reveal|show|print|repeat|output|display|echo|dump|disclose)\s+(?:me\s+|us\s+|to\s+me\s+)?(?:all\s+|the\s+)?(?:your|the\s+system|its\s+own)\s+(?:full\s+|entire\s+|complete\s+|exact\s+|original\s+|initial\s+|whole\s+)?(?:system\s+)?(?:prompt\s*texts?|prompts?|instruction|instructions|configuration|config|system\s+message)\b
 
 id: PL-002
 category: prompt_leak
