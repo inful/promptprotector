@@ -57,6 +57,17 @@ type Sample struct {
 	// rule ID makes the corpus a test of the ruleset rather than of
 	// detection.
 	Rules []string `json:"rules,omitempty"`
+
+	// Mechanism records the attack construction a positive uses
+	// ("instruction_override", "role_hijack", "prompt_leak"), so a
+	// shortfall can be attributed to a category rather than reported as
+	// one anonymous percentage.
+	Mechanism string `json:"mechanism,omitempty"`
+
+	// Lang records the corpus language where it varies. deepset pairs
+	// every English sample with a German one, so the clean slice doubles
+	// as the regression test that non-English text is not flagged.
+	Lang string `json:"lang,omitempty"`
 }
 
 // ScopeOutOfScope marks a labelled injection the library does not attempt.

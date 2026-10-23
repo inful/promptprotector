@@ -60,3 +60,49 @@ README where "4.2%" is not.
 Per source: upstream URL, revision or commit SHA, licence, number of
 samples, date fetched, and any filtering applied (especially the
 `out_of_scope` marking, which changes the denominator).
+---
+
+## What was vendored, 2026-10-23
+
+`dev/injections.jsonl` — 50 positives from deepset/prompt-injections
+**train**, taken on a deterministic stride so the slice is not
+cherry-picked. `dev/clean.jsonl` — 50 clean train samples the same way,
+14 of them German.
+
+Each injection carries a `mechanism` (`instruction_override`,
+`role_hijack`, `prompt_leak`, `other`) assigned from the text by rule,
+not by whether this library detects it — deciding scope by what the
+ruleset catches would make recall 100% by construction and hide every
+real miss. `other` samples are marked `scope: "out_of_scope"`.
+
+## SALAD-Bench: evaluated and rejected
+
+The example file (`examples/example_qa.jsonl`, 127 rows) labels whether
+a content-safety query should be *refused*, not whether a text is a
+*prompt injection*. Its questions are content moderation ("how do I stalk
+someone on facebook"), which is a different axis entirely — a detector
+scored against it would be measuring agreement with a content policy,
+not false positives on instruction-override detection.
+
+It remains the right corpus for a content-moderation companion library.
+It is the wrong corpus for this one. Not vendored; the loader and the
+gate are corpus-agnostic, so adding it later is a file.
+
+## Measured on this dev set
+
+| measure | result | PLAN.md target |
+|---|---|---|
+| recall, unscoped | **14.0 %** (7/50) | ≥ 90 % |
+| recall, scoped to claimed mechanisms | **24.1 %** (7/29) | ≥ 90 % |
+| false positives on 50 real user prompts | **0.0 %** | ≤ 5 % |
+
+Over the **full** 203-sample train split, unscoped recall is **8.9 %**,
+and over the 116-sample test split **1.7 %**. The 50-sample dev slice
+reads higher than the full set because of sampling noise; the full-set
+number is the reliable one.
+
+By mechanism on the dev slice: instruction_override 6/16,
+prompt_leak 1/4, role_hijack 0/9.
+
+The false-positive rate is the one comfortable result, and it is the one
+that matters most for a detector people will keep turned on.
