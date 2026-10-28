@@ -12,7 +12,10 @@ not from a secondary description.
 All three permit redistribution with attribution, and all three are
 compatible with this repository's GPL-3.0-or-later.
 
-Nothing is vendored yet.
+`dev/` holds what is vendored: 50 injections and 50 clean samples from
+deepset/prompt-injections train, Apache-2.0. The `encoded/` corpus is
+generated, not vendored. The holdout is not vendored and is not
+committed — see the end of this file.
 
 ## Things that must happen before vendoring
 

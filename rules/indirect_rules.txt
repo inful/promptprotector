@@ -35,6 +35,12 @@
 # IND-PL-001" is right about one pair and wrong about the other thirteen,
 # and that assumption is how a false positive survived here.
 #
+# MEASURED (deepset/prompt-injections train, Apache-2.0). This set catches
+# about 7% of in-scope attacks where the default set catches about 44%,
+# and false-positives 0 of 343 real user prompts. That is the price of
+# the bar above: it is a reliable tripwire for a forged chat delimiter or
+# a fabricated authority, and a poor detector of injection in general.
+#
 # Pair this with promptbuilder.Wrap (Spotlighting), which is the cheaper
 # and more reliable defense for indirect injection: if untrusted text is
 # datamarked as data, the model treats it as data.

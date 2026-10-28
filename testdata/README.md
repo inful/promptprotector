@@ -38,14 +38,20 @@ percent-encoding misses a phrase payload but still surfaces a
 Over-blocking is caught by the `clean/` rows instead, which include an
 ordinary URL containing a `+`.
 
-## Vendored corpora
+## `dev/` — the vendored dev set
 
-Not yet present. `SOURCES.md` will record, per source: upstream URL,
-revision, licence, and the number of samples taken. All three candidate
-sources are permissively licensed (Apache-2.0, Apache-2.0, MIT), so
-slices may be committed with attribution.
+`dev/injections.jsonl` — 50 positives from deepset/prompt-injections
+**train**. `dev/clean.jsonl` — 50 clean train samples, 14 of them
+German.
 
-A vendored slice is a **dev set** — committed, run in `go test`, and
-expected to be tuned against. The holdout is fetched at CI time and is
-never committed, because a set you fix rules against stops being held
-out.
+A vendored slice is a **dev set**: committed, run in `go test`, and
+expected to be tuned against. The ruleset *was* tuned against it, which
+is why its recall figure is optimistic.
+
+**The holdout is not committed.** deepset's `test` split is fetched at
+CI time and never vendored, because a set you fix rules against stops
+being held out. It has not been scored yet — that is the one figure
+that would settle the accuracy question.
+
+`SOURCES.md` records, per source: upstream URL, revision, licence,
+number of samples, date fetched, and any filtering applied.

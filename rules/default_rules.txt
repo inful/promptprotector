@@ -9,6 +9,14 @@
 # specific phrasing rather than bare keyword matching. Expect a bare
 # keyword rule like /ignore/ to be rejected in review.
 #
+# MEASURED (deepset/prompt-injections train, Apache-2.0). Of 61 English
+# positives using a mechanism this set claims to detect, this set catches
+# 27 - 44%. It false-positives 0 of 343 real user prompts, including 14
+# in German. Coverage, not precision, is the weak side: the object nouns
+# and phrasings below were widened once the corpus showed the gaps, and
+# the next round of widening is data work, not guesswork. See
+# testdata/SOURCES.md.
+#
 # Known limitations, stated plainly:
 #   - These are English-only. Multilingual injection ("ignoriere les
 #     instructions precedentes", "ignora las instrucciones anteriores")

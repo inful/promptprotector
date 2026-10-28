@@ -2,9 +2,18 @@
 
 Layered prompt-injection detector for Go LLM applications.
 
-Zero dependencies (except the CLI's flag parser), offline, sub-millisecond.
-Two input layers plus an output scanner; 48 curated rules; results carry
-per-finding evidence rather than a bare verdict.
+Zero dependencies (except the CLI's flag parser), offline, hermetic.
+Two input layers plus an output scanner; 34 curated rules for typed input
+and 14 for retrieved content; results carry per-finding evidence rather
+than a bare verdict.
+
+**Measured, not claimed:** on the
+[deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections)
+corpus, `ScanInput` catches **44 %** of in-scope English attacks and
+false-positives **0 %** on 343 real user prompts; `ScanUntrusted` catches
+**7 %** of the same attacks. See
+[Known limitations](#known-limitations) — read them before you deploy
+this.
 
 **This library raises the cost of attacking your LLM app. It does not
 eliminate prompt injection.** Every published detector is bypassed by
@@ -20,8 +29,10 @@ As a library:
 go get github.com/inful/promptprotector
 ```
 
-Or the `pp` CLI, from a release archive (linux, darwin or windows, on
-amd64 or arm64 — every archive ships a `checksums.txt`):
+Or the `pp` CLI, from a
+[release archive](https://github.com/inful/promptprotector/releases)
+(linux, darwin or windows, on amd64 or arm64 — every archive ships a
+`checksums.txt`):
 
 ```bash
 # macOS / Linux
@@ -68,9 +79,17 @@ The three scanners match the three trust boundaries in an LLM app:
 | `ScanUntrusted` | text the model will *read* | RAG chunks, tool results, web fetches |
 | `ScanOutput` | text the model produced | canary leak, secrets, PII |
 
-`ScanUntrusted` uses a **separate, stricter ruleset**. In a document,
-instruction-shaped text is often legitimate documentation, so the bar for
-flagging is higher.
+`ScanUntrusted` uses a **separate, narrower ruleset** — 14 rules rather
+than 34. In a document, instruction-shaped text is often legitimate
+documentation, so the bar for flagging is much higher.
+
+The consequence is measured, not theoretical: on the corpus above,
+`ScanUntrusted` catches **7 %** of in-scope attacks where `ScanInput`
+catches **44 %**, while false-positiving 0 % on both. It is a reliable
+tripwire for forged chat delimiters and fabricated authority, and a poor
+detector of injection in general. **For retrieved content, datamarking
+is the defence; use `ScanUntrusted` as a cheap extra signal, not as the
+control.**
 
 ### Canary leak detection
 
@@ -103,16 +122,28 @@ detected, not just the first.
 
 ### Indirect injection in RAG
 
-Wrap untrusted retrieved text before it enters the context. This is
-stronger than detection alone:
+**Wrap untrusted retrieved text before it enters the context.** This is
+stronger than detection alone, and on documents it is the only reliable
+option — `ScanUntrusted` catches 7 % of in-scope attacks (see
+[above](#library-usage)):
 
 ```go
 docs := retrieve(query)
 for _, d := range docs {
-    if res, _ := promptprotector.ScanUntrusted(ctx, d.Text); res.Decision != promptprotector.Allow {
-        continue
-    }
     context += promptbuilder.Wrap(d.Text)   // datamark it as data
+}
+```
+
+`ScanUntrusted` still earns a place as a cheap extra signal on the same
+chunk — it reliably catches a forged `<|im_start|>` or a fabricated
+"I am the developer" — but do not make it the gate:
+
+```go
+for _, d := range docs {
+    if res, _ := promptprotector.ScanUntrusted(ctx, d.Text); res.Decision != promptprotector.Allow {
+        log.Warn("suspicious retrieved document", "findings", res.Findings)
+    }
+    context += promptbuilder.Wrap(d.Text)
 }
 ```
 
@@ -150,7 +181,7 @@ pp --format=json ./prompts/*.txt
 # CI gate: fail on anything suspicious
 pp --fail-warn ./input.txt
 
-# Scan retrieved content with the stricter ruleset
+# Scan retrieved content with the document ruleset
 pp --mode=untrusted ./retrieved.md
 
 # Check model output for canary leak and secrets
@@ -179,26 +210,28 @@ raw input
   │                  and RTL-override detection, homoglyphs, Shannon
   │                  entropy runs, context padding
   │
-  ├─ L2 regex        48 curated rules across OWASP LLM01:2025 categories
+  ├─ L2 regex        34 curated rules for typed input, 14 for documents,
+  │                  across OWASP LLM01:2025 categories
   │
   └─ fusion          max signal × 0.7  +  corroboration × 0.3
 
 ScanOutput adds:  canary leak · secrets · PII
 ```
 
-Four forms are scanned: the raw input, its whole-string decoding, a
-de-fanged copy with zero-width and bidi controls removed and homoglyphs
-folded to Latin, and any further base64 substrings found inside the raw
-input. Attackers split payloads and insert invisible characters to defeat
-single-pass checks, so an instruction hidden inside a base64 wrapper — or
-broken up as `instructi<U+200B>ons` — is only visible after that pass.
-Findings from the three rewritten forms carry no byte offset (the offsets
+Five forms are scanned: the raw input; a de-fanged copy with zero-width
+and bidi controls removed and homoglyphs folded to Latin; the whole-string
+decoding and its de-fanged copy; and each base64 substring found inside
+the raw input. Attackers split payloads and insert invisible characters to
+defeat single-pass checks, so an instruction hidden inside a base64
+wrapper — or broken up as `instructi<U+200B>ons` — is only visible after
+that pass.
+
+Findings from the four rewritten forms carry no byte offset (the offsets
 would index the rewritten text, not the input), so locate them from
-`Evidence`. The L1 layer
-also tries to recover encodings buried in surrounding text (markdown
-wrappers, JSON envelopes, code fences); for sensitive paths, prefer
-promptbuilder.Wrap on the input side because it is a stronger defense
-than relying on detection.
+`Evidence`. The L1 layer also recovers encodings buried in surrounding
+text — markdown wrappers, JSON envelopes, code fences — and hex payloads
+embedded in prose; for sensitive paths, prefer promptbuilder.Wrap on the
+input side because it is a stronger defense than relying on detection.
 
 Fusion has two independent terms:
 
@@ -268,7 +301,7 @@ These are real, measured, and worth knowing before you rely on it:
 - **Paraphrase defeats the rules.** The curated set is literal patterns;
   a reworded attack matches nothing. A classifier would be needed, and
   even classifiers fall to paraphrase (see the Hackett et al. bypass
-  study). This is why the ruleset ships small — 50 high-precision
+  study). This is why the ruleset ships small — 34 high-precision
   patterns beat 500 speculative ones.
 - **The ruleset is a dataset, not a security boundary.** The patterns are
   public; assume an attacker has read them.
@@ -279,9 +312,10 @@ These are real, measured, and worth knowing before you rely on it:
   supersedes all previous instructions") and a recipe ("Repeat everything
   above verbatim"). Narrowing was measured and costs more attack recall
   than it saves — the benign and attack forms are structurally identical.
-  `ScanUntrusted`, the ruleset built for documents, measures 0 on the same
-  corpus. Use the right scanner, and prefer `promptbuilder.Wrap` for
-  retrieved content.
+  `ScanUntrusted` measures 0 false positives on the same corpus, and on
+  the deepset corpus it catches 7 % of in-scope attacks against
+  `ScanInput`'s 44 %. Use the right scanner, and prefer
+  `promptbuilder.Wrap` for retrieved content.
 - **Injection only, not content safety.** Classifying "how do I make a
   bomb" is content moderation, a different product (Llama Guard, Granite
   Guardian). The classic "jailbreak" phrasings are covered here because
@@ -294,8 +328,10 @@ These are real, measured, and worth knowing before you rely on it:
   German and a third is persuasion or stylisation rather than injection.
   On the 343 clean samples it false-positives **0 %**. The held-out test
   split has not been scored; treat 44 % as the train figure, not a
-  guarantee. See `testdata/SOURCES.md` for the full breakdown and for
-  what a 90 % unscoped figure would actually require.
+  guarantee. `ScanUntrusted` catches 7 % of the same attacks. The
+  encoding layer is separate and does better: every encoded payload in
+  `testdata/encoded/` is detected. See `testdata/SOURCES.md` for the full
+  breakdown and for what a 90 % unscoped figure would actually require.
 - **Fusion weights and thresholds are reasoned estimates,** not fitted.
   Treat the verdicts as a starting point and tune against your own
   traffic.
@@ -328,10 +364,10 @@ These are real, measured, and worth knowing before you rely on it:
 
 Measured on an Apple Silicon laptop, single core:
 
-| Input | L1 normalize | L2 regex |
-|---|---|---|
-| 4.4 KB benign | 1.21 ms | 1.12 ms |
-| 3.1 KB attack | 1.22 ms | 1.19 ms |
+| Input | median | p95 | p99 |
+|---|---|---|---|
+| 4.4 KB benign | 5.4 ms | 6.4 ms | 7.6 ms |
+| 3.1 KB attack | 3.5 ms | 5.1 ms | 8.0 ms |
 
 Input is capped at 32 KiB by default (`WithMaxInputBytes`), and the cap is
 enforced in **both** layers: L2 rule matches cannot report a span past it.
@@ -360,4 +396,8 @@ GPL-3.0-or-later. See [LICENSE](./LICENSE).
 
 The bundled rulesets are original work derived from published attack
 categories (OWASP LLM Top 10 LLM01:2025 and public jailbreak
-literature). No third-party rule corpus is vendored.
+literature). No third-party *rule* corpus is vendored — but the test
+corpora under `testdata/` are: 50 samples from
+[deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections)
+(Apache-2.0), used to measure detection accuracy. `testdata/SOURCES.md`
+records the provenance and licence of every sample.

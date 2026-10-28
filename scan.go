@@ -139,10 +139,19 @@ func ScanInput(ctx context.Context, text string) (Result, error) {
 // come from the user: a retrieved document, a tool result, a web page
 // chunk. This is the indirect-injection path.
 //
-// It uses the indirect ruleset, which is stricter than the default,
-// because instruction-shaped text in a document is often legitimate
-// documentation. Pair it with promptbuilder.Wrap (Spotlighting), which is
-// a stronger defense than detection alone.
+// It uses the indirect ruleset: 14 rules rather than 34, because
+// instruction-shaped text in a document is often legitimate documentation
+// and a false positive on a RAG chunk breaks the product.
+//
+// The trade is measured. On the deepset/prompt-injections corpus this
+// scanner catches about 7% of in-scope attacks where ScanInput catches
+// about 44%, while false-positiving 0% on both. It is a reliable tripwire
+// for a forged chat delimiter or a fabricated authority, and a poor
+// detector of injection in general.
+//
+// Pair it with promptbuilder.Wrap (Spotlighting), which is a stronger
+// defense than detection alone. Retrieved content should be datamarked
+// first; treat a ScanUntrusted hit as an extra signal, not as the gate.
 func ScanUntrusted(ctx context.Context, text string) (Result, error) {
 	return defaultDetector.ScanUntrusted(ctx, text)
 }
@@ -167,7 +176,8 @@ func (d *Detector) ScanInput(ctx context.Context, text string) (Result, error) {
 }
 
 // ScanUntrusted analyses retrieved or tool-returned text. See the
-// package-level ScanUntrusted.
+// package-level ScanUntrusted for what its ruleset does and does not
+// catch.
 func (d *Detector) ScanUntrusted(ctx context.Context, text string) (Result, error) {
 	return d.run(ctx, text, d.cfg.indirectRules)
 }
