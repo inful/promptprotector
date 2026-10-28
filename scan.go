@@ -145,9 +145,10 @@ func ScanInput(ctx context.Context, text string) (Result, error) {
 //
 // On the vendored deepset/prompt-injections train split this scanner
 // catches about 5% of in-scope attacks where ScanInput catches about
-// 42%, while false-positiving 0% on both. It is a reliable tripwire
-// for a forged chat delimiter or a fabricated authority, and a poor
-// detector of injection in general.
+// 49%, while false-positiving 0% on both. On the test split, which the
+// ruleset was never tuned against, it catches none of the 22 in-scope
+// attacks. It is a reliable tripwire for a forged chat delimiter or a
+// fabricated authority, and a poor detector of injection in general.
 //
 // Pair it with promptbuilder.Wrap (Spotlighting), which is a stronger
 // defense than detection alone. Retrieved content should be datamarked

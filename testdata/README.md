@@ -19,11 +19,11 @@ samples and one re-sample moves the number by two points. At n=343 the
 resolution is 0.3 %, and every number the README quotes is something a
 reader can reproduce with `go test -v -run TestCorpusGate ./`.
 
-**The holdout is not committed.** deepset's `test` split is fetched at
-scoring time and never vendored, because a set you fix rules against
-stops being held out. It has not been scored — that is the one figure
-that would settle the accuracy question.
-
+**The holdout was not committed, until it was scored.** deepset's `test`
+split used to be fetched at scoring time and never vendored, because a
+set you fix rules against stops being held out. It was read for the
+first time on 2026-10-28 and is now in `generalisation/`, under a name
+that says what it is.
 ### Schema
 
 | field | meaning |
@@ -40,6 +40,23 @@ that would settle the accuracy question.
 attack, never from what the detector catches — deciding scope by
 detection would make recall 100 % by construction and hide every real
 miss. `SOURCES.md` documents the rule and how it was cross-checked.
+
+## `generalisation/` — the split the ruleset was not tuned against
+
+`generalisation/injections.jsonl` — the 60 positives from
+deepset/prompt-injections **test**. `generalisation/clean.jsonl` — its 56
+clean samples.
+
+This is not called `holdout/` because it is no longer held out. It was
+read for the first time on 2026-10-28, scored, and its misses
+inspected. It is a **measurement set** from here on: the ruleset must
+not be tuned against it, and any future release that changes the
+ruleset has to justify the change from the train split alone.
+
+The result is in `SOURCES.md` and is not flattering: 5 of 22 in-scope
+attacks, against 36 of 74 on the split the ruleset was tuned against.
+
+Reproduce with `go test -v -run TestGeneralisationGate ./`.
 
 ## `encoded/encoded.jsonl`
 

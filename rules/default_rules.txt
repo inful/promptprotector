@@ -11,13 +11,23 @@
 #
 # MEASURED on the vendored deepset/prompt-injections train split
 # (Apache-2.0), which is in testdata/train/: of the 74 English positives
-# using a mechanism this set claims to detect, it catches 31. It
+# using a mechanism this set claims to detect, it catches 36. It
 # false-positives 0 of the 343 real user prompts there, 122 of them
-# German. Coverage is the weak side: the object nouns and phrasings
-# below were widened once the corpus showed the gaps, so the remaining
-# misses are known and enumerable. See testdata/SOURCES.md.
+# German.
 #
-# The numbers come from `go test -run TestCorpusGate ./`.
+# THAT FIGURE IS THE OPTIMISTIC ONE. The patterns below were widened
+# against the train split, so it measures what the ruleset has been
+# shown. On the test split (testdata/generalisation/), which it was
+# never tuned against, it catches 5 of the same 22 in-scope attacks —
+# 22.7% against 48.6%. The ruleset matches phrasing it has seen, and
+# the test split contains attack families it has never met.
+#
+# Coverage is the weak side: the object nouns and phrasings below were
+# widened once the corpus showed the gaps, so the remaining misses are
+# known and enumerable. See testdata/SOURCES.md.
+#
+# The numbers come from
+# `go test -run 'TestCorpusGate|TestGeneralisationGate' ./`.
 #
 # Known limitations, stated plainly:
 #   - These are English-only. Multilingual injection ("ignoriere les

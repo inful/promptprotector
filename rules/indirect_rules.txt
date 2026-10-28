@@ -37,13 +37,15 @@
 #
 # MEASURED on the vendored deepset/prompt-injections train split
 # (Apache-2.0) in testdata/train/: this set catches 4 of the 74 English
-# in-scope attacks, where the default set catches 31. It false-positives
-# 0 of the 343 real user prompts there. That is the price of the bar
-# above. It works as a tripwire for a forged chat delimiter or a
-# fabricated authority, and does not work as a detector of injection in
-# general.
+# in-scope attacks, where the default set catches 36. It false-positives
+# 0 of the 343 real user prompts there. On the test split
+# (testdata/generalisation/) it catches 0 of the 22 in-scope attacks.
+# That is the price of the bar above. It works as a tripwire for a
+# forged chat delimiter or a fabricated authority, and does not work as
+# a detector of injection in general.
 #
-# The numbers come from `go test -run TestCorpusGate ./`.
+# The numbers come from
+# `go test -run 'TestCorpusGate|TestGeneralisationGate' ./`.
 #
 # Pair this with promptbuilder.Wrap (Spotlighting), which is the cheaper
 # and more reliable defense for indirect injection: if untrusted text is

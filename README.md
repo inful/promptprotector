@@ -7,12 +7,13 @@ an output scanner; 34 rules for typed input and 14 for retrieved
 content; findings carry evidence rather than a bare verdict.
 
 Accuracy, measured on
-[deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections)
-train: `ScanInput` catches 42 % of in-scope English attacks and
-false-positives 0 % on 343 real user prompts; `ScanUntrusted` catches
-5 %. About three fifths of the in-scope attacks are still missed, and the
-ruleset is English-only. [Known limitations](#known-limitations) has the
-breakdown.
+[deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections):
+`ScanInput` catches **48.6 %** of in-scope English attacks on the train
+split and **22.7 %** on the test split it was never tuned against; it
+false-positives 0 % on 343 real user prompts. The gap between those two
+numbers is the honest measure of how much the ruleset is matching
+phrasing it has seen rather than the underlying attack.
+[Known limitations](#known-limitations) has the breakdown.
 
 **This library raises the cost of attacking your LLM app. It does not
 eliminate prompt injection.** Every published detector is bypassed by
@@ -84,8 +85,9 @@ documentation, so the bar for flagging is much higher.
 
 The consequence is measured, not theoretical: on the corpus above,
 `ScanUntrusted` catches **5 %** of in-scope attacks where `ScanInput`
-catches **42 %**, while false-positiving 0 % on both. It is a reliable
-tripwire for forged chat delimiters and fabricated authority, and a poor
+catches **49 %**, while false-positiving 0 % on both. On the test split
+it catches none of the 22 in-scope attacks. It is a reliable tripwire
+for forged chat delimiters and fabricated authority, and a poor
 detector of injection in general. **For retrieved content, datamarking
 is the defence; use `ScanUntrusted` as a cheap extra signal, not as the
 control.**
@@ -313,7 +315,7 @@ These are real, measured, and worth knowing before you rely on it:
   than it saves — the benign and attack forms are structurally identical.
   `ScanUntrusted` measures 0 false positives on the same corpus, and on
   the deepset corpus it catches 5 % of in-scope attacks against
-  `ScanInput`'s 42 %. Use the right scanner, and prefer
+  `ScanInput`'s 49 %. Use the right scanner, and prefer
   `promptbuilder.Wrap` for retrieved content.
 - **Injection only, not content safety.** Classifying "how do I make a
   bomb" is content moderation, a different product (Llama Guard, Granite
@@ -321,18 +323,39 @@ These are real, measured, and worth knowing before you rely on it:
   they reassign the model's identity.
 - **Detection accuracy is measured, and it is not high.** Against
   [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections)
-  train (Apache-2.0), scoped to the English positives that use an attack
-  mechanism this library claims to detect: **42 %** (31 of 74). Across all
-  203 positives unscoped it is **15 %**, because a third of the corpus is
-  German and a third is persuasion or stylisation rather than injection.
-  On the 343 clean samples it false-positives **0 %**. The held-out test
-  split has not been scored; treat 42 % as the train figure, not a
-  guarantee. `ScanUntrusted` catches **5 %** of the same attacks. The
-  encoding layer is separate and does better: 30 of the 36 encoded
+  (Apache-2.0), scoped to the English positives that use an attack
+  mechanism this library claims to detect:
+
+  | split | caught | rate |
+  |---|---|---|
+  | train — the ruleset was tuned against this | 36 of 74 | **48.6 %** |
+  | test — never tuned against | 5 of 22 | **22.7 %** |
+
+  Across all 203 train positives unscoped it is **17.7 %**, because a
+  third of the corpus is German and a third is persuasion or stylisation
+  rather than injection. On the 343 clean samples it false-positives
+  **0 %**. `ScanUntrusted` catches **5 %** of the same attacks on the
+  train split and **none of the 22** on the test split.
+
+  **The two rows of that table are the point.** The ruleset matches
+  phrasings it has seen; on the split it was never shown it catches less
+  than half as much. The test split contains attack families the train
+  split does not have at all — "print the prompt above", a forced
+  nonsense token, a request for the model's embeddings — and the
+  ruleset has no pattern for any of them. The train figure is the
+  optimistic one; the test figure is the honest one.
+
+  The test split has now been read and scored, so it is a measurement
+  set rather than a holdout; the ruleset must not be tuned against it
+  again. The rule change that accompanied the reading was derived from
+  the train misses alone.
+
+  The encoding layer is separate and does better: 30 of the 36 encoded
   payloads in `testdata/encoded/` are detected, the other 6 being
   percent-encoded, which is a known gap. Every figure here is printed by
-  `go test -run TestCorpusGate ./`. See `testdata/SOURCES.md` for the
-  breakdown and for what a 90 % unscoped figure would actually require.
+  `go test -run 'TestCorpusGate|TestGeneralisationGate' ./`. See
+  `testdata/SOURCES.md` for the breakdown and for what a 90 % unscoped
+  figure would actually require.
 - **Fusion weights and thresholds are reasoned estimates,** not fitted.
   Treat the verdicts as a starting point and tune against your own
   traffic.
