@@ -59,12 +59,12 @@
 id: PI-001
 category: instruction_override
 weight: 0.90
-pattern: (?i)\b(?:ignore|disregard|forget|discard|override|remove)\s+(?:all\s+|any\s+|the\s+|your\s+)*(?:previous|prior|above|earlier|preceding|foregoing|original|initial)\s+(?:system\s+)?(?:instruction|instructions|prompt|prompts|rule|rules|direction|directions|guideline|guidelines|context|conversation|message|messages|task|tasks|assignment|assignments|order|orders|command|commands|directive|directives|content)\b|\bleave\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above|earlier|preceding|foregoing|last|original)\s+\w+\s+behind\b
+pattern: (?i)\b(?:ignore|disregard|forget|discard|override|remove)\s+(?:about\s+|of\s+)?(?:all\s+|any\s+|the\s+|your\s+)*(?:previous|prior|above|earlier|preceding|foregoing|original|initial)\s+(?:system\s+)?(?:instruction|instructions|prompt|prompts|rule|rules|direction|directions|guideline|guidelines|context|conversation|message|messages|task|tasks|assignment|assignments|order|orders|command|commands|directive|directives|content|information|info)\b|\bleave\s+(?:all\s+)?(?:the\s+)?(?:previous|prior|above|earlier|preceding|foregoing|last|original)\s+\w+\s+behind\b
 
 id: PI-002
 category: instruction_override
 weight: 0.90
-pattern: (?i)\b(?:ignore|disregard|forget)\s+(?:everything|all)\s+(?:you\s+(?:were\s+told|know|learned)|above|before|previously|earlier|so\s+far)\b|\b(?:forget|ignore|disregard)\s+(?:everything|all)\s*[,.;]\s*(?:and\s+|now\s+|then\s+)?(?:write|say|print|tell|answer|respond|output|show|listen|follow|comply|do)\b
+pattern: (?i)\b(?:ignore|disregard|forget)\s+(?:everything|all)\s+(?:you\s+(?:were\s+told|know|learned|have\s+been\s+told)|above|before|previously|earlier|so\s+far|we\s+(?:discussed|talked\s+about)|i\s+told\s+you|what\s+(?:you|i)\s+said|your\s+(?:instructions?|rules?|prompt|tasks?|orders?|directives?))\b|\b(?:forget|ignore|disregard)\s+(?:everything|all)\s*[,.;]\s*(?:and\s+|now\s+|then\s+)?(?:write|say|print|tell|answer|respond|output|show|listen|follow|comply|do)\b|\b(?:forget|ignore|disregard)\s+(?:the\s+)?above\s*[,.;]?\s*(?:and\s+|now\s+|then\s+)?(?:write|say|print|tell|output|show)\b
 
 id: PI-003
 category: instruction_override
