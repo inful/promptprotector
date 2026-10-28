@@ -73,6 +73,21 @@ type Sample struct {
 // ScopeOutOfScope marks a labelled injection the library does not attempt.
 const ScopeOutOfScope = "out_of_scope"
 
+// ScopeEnglishInScope is the population the README quotes a recall
+// figure over: an injection that uses a mechanism the library claims to
+// detect, written in English.
+//
+// Both conditions matter and they are separate. The ruleset is
+// English-only, so a German attack is unreachable no matter how it is
+// phrased. An out-of-scope sample is a content request the library does
+// not attempt at all. Either excludes a row from the denominator.
+//
+// Keeping this as one named predicate means the gate and the README
+// cannot drift apart: the gate prints the figure the README quotes.
+func ScopeEnglishInScope(s Sample) bool {
+	return s.Scope != ScopeOutOfScope && s.Lang == "en"
+}
+
 // LoadCorpus reads a JSONL corpus. It fails the test rather than
 // returning an empty slice, because a silently-empty corpus turns every
 // recall measurement into 100%.
@@ -137,6 +152,11 @@ func (r Report) Rate() float64 {
 // MeasureRecall scores a corpus. A sample counts as detected when the
 // decision is above Allow, or — for samples naming specific rules — when
 // one of those rules fired.
+//
+// Samples marked scope=out_of_scope are excluded and counted in
+// Report.Excluded. To measure the raw upstream denominator instead,
+// clear the scope marking on the samples before calling, so the number
+// a reader gets from the unmodified corpus is the number reported.
 func MeasureRecall(samples []Sample, verdict func(Sample) (bool, []string)) Report {
 	var r Report
 	for _, s := range samples {
@@ -171,6 +191,17 @@ func AssertRecall(t testing.TB, label string, r Report, minRate float64) {
 	if rate := r.Rate(); rate < minRate {
 		t.Errorf("%s: recall %.1f%% is below the %.0f%% gate (%d missed)", label, rate*100, minRate*100, len(r.Missed))
 	}
+}
+
+// Filter returns the samples for which keep returns true.
+func Filter(samples []Sample, keep func(Sample) bool) []Sample {
+	out := make([]Sample, 0, len(samples))
+	for _, s := range samples {
+		if keep(s) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // MeasureFalsePositives counts clean samples that were flagged.

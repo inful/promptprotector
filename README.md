@@ -1,19 +1,18 @@
 # promptprotector
 
-Layered prompt-injection detector for Go LLM applications.
+Prompt-injection detector for Go LLM applications.
 
-Zero dependencies (except the CLI's flag parser), offline, hermetic.
-Two input layers plus an output scanner; 34 curated rules for typed input
-and 14 for retrieved content; results carry per-finding evidence rather
-than a bare verdict.
+Zero dependencies except the CLI's flag parser. Two input scanners and
+an output scanner; 34 rules for typed input and 14 for retrieved
+content; findings carry evidence rather than a bare verdict.
 
-**Measured, not claimed:** on the
+Accuracy, measured on
 [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections)
-corpus, `ScanInput` catches **44 %** of in-scope English attacks and
-false-positives **0 %** on 343 real user prompts; `ScanUntrusted` catches
-**7 %** of the same attacks. See
-[Known limitations](#known-limitations) — read them before you deploy
-this.
+train: `ScanInput` catches 42 % of in-scope English attacks and
+false-positives 0 % on 343 real user prompts; `ScanUntrusted` catches
+5 %. About three fifths of the in-scope attacks are still missed, and the
+ruleset is English-only. [Known limitations](#known-limitations) has the
+breakdown.
 
 **This library raises the cost of attacking your LLM app. It does not
 eliminate prompt injection.** Every published detector is bypassed by
@@ -84,8 +83,8 @@ than 34. In a document, instruction-shaped text is often legitimate
 documentation, so the bar for flagging is much higher.
 
 The consequence is measured, not theoretical: on the corpus above,
-`ScanUntrusted` catches **7 %** of in-scope attacks where `ScanInput`
-catches **44 %**, while false-positiving 0 % on both. It is a reliable
+`ScanUntrusted` catches **5 %** of in-scope attacks where `ScanInput`
+catches **42 %**, while false-positiving 0 % on both. It is a reliable
 tripwire for forged chat delimiters and fabricated authority, and a poor
 detector of injection in general. **For retrieved content, datamarking
 is the defence; use `ScanUntrusted` as a cheap extra signal, not as the
@@ -124,7 +123,7 @@ detected, not just the first.
 
 **Wrap untrusted retrieved text before it enters the context.** This is
 stronger than detection alone, and on documents it is the only reliable
-option — `ScanUntrusted` catches 7 % of in-scope attacks (see
+option — `ScanUntrusted` catches 5 % of in-scope attacks (see
 [above](#library-usage)):
 
 ```go
@@ -313,8 +312,8 @@ These are real, measured, and worth knowing before you rely on it:
   above verbatim"). Narrowing was measured and costs more attack recall
   than it saves — the benign and attack forms are structurally identical.
   `ScanUntrusted` measures 0 false positives on the same corpus, and on
-  the deepset corpus it catches 7 % of in-scope attacks against
-  `ScanInput`'s 44 %. Use the right scanner, and prefer
+  the deepset corpus it catches 5 % of in-scope attacks against
+  `ScanInput`'s 42 %. Use the right scanner, and prefer
   `promptbuilder.Wrap` for retrieved content.
 - **Injection only, not content safety.** Classifying "how do I make a
   bomb" is content moderation, a different product (Llama Guard, Granite
@@ -322,15 +321,17 @@ These are real, measured, and worth knowing before you rely on it:
   they reassign the model's identity.
 - **Detection accuracy is measured, and it is not high.** Against
   [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections)
-  train (Apache-2.0), scoped to the English positives that use an
-  attack mechanism this library claims to detect: **44 %**. Across all
-  203 positives unscoped it is 15 %, because a third of the corpus is
+  train (Apache-2.0), scoped to the English positives that use an attack
+  mechanism this library claims to detect: **42 %** (31 of 74). Across all
+  203 positives unscoped it is **15 %**, because a third of the corpus is
   German and a third is persuasion or stylisation rather than injection.
   On the 343 clean samples it false-positives **0 %**. The held-out test
-  split has not been scored; treat 44 % as the train figure, not a
-  guarantee. `ScanUntrusted` catches 7 % of the same attacks. The
-  encoding layer is separate and does better: every encoded payload in
-  `testdata/encoded/` is detected. See `testdata/SOURCES.md` for the full
+  split has not been scored; treat 42 % as the train figure, not a
+  guarantee. `ScanUntrusted` catches **5 %** of the same attacks. The
+  encoding layer is separate and does better: 30 of the 36 encoded
+  payloads in `testdata/encoded/` are detected, the other 6 being
+  percent-encoded, which is a known gap. Every figure here is printed by
+  `go test -run TestCorpusGate ./`. See `testdata/SOURCES.md` for the
   breakdown and for what a 90 % unscoped figure would actually require.
 - **Fusion weights and thresholds are reasoned estimates,** not fitted.
   Treat the verdicts as a starting point and tune against your own
@@ -397,7 +398,9 @@ GPL-3.0-or-later. See [LICENSE](./LICENSE).
 The bundled rulesets are original work derived from published attack
 categories (OWASP LLM Top 10 LLM01:2025 and public jailbreak
 literature). No third-party *rule* corpus is vendored — but the test
-corpora under `testdata/` are: 50 samples from
+corpora under `testdata/` are: the full
 [deepset/prompt-injections](https://huggingface.co/datasets/deepset/prompt-injections)
-(Apache-2.0), used to measure detection accuracy. `testdata/SOURCES.md`
-records the provenance and licence of every sample.
+train split, 546 rows (Apache-2.0), used to measure detection accuracy.
+`testdata/SOURCES.md` records the provenance and licence of every
+sample, including the one place where deepset's own licence fields
+disagree with each other.

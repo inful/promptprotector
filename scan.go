@@ -143,9 +143,9 @@ func ScanInput(ctx context.Context, text string) (Result, error) {
 // instruction-shaped text in a document is often legitimate documentation
 // and a false positive on a RAG chunk breaks the product.
 //
-// The trade is measured. On the deepset/prompt-injections corpus this
-// scanner catches about 7% of in-scope attacks where ScanInput catches
-// about 44%, while false-positiving 0% on both. It is a reliable tripwire
+// On the vendored deepset/prompt-injections train split this scanner
+// catches about 5% of in-scope attacks where ScanInput catches about
+// 42%, while false-positiving 0% on both. It is a reliable tripwire
 // for a forged chat delimiter or a fabricated authority, and a poor
 // detector of injection in general.
 //
